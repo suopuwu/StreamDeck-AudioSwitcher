@@ -234,25 +234,57 @@
           deviceListDiv.removeChild(deviceListDiv.firstChild);
         }
 
+        const iconOptions = ["headphones", "speakers", "active", "inactive"];
+
         configuredDevices.forEach((device, index) => {
           const deviceId = typeof device == "object" ? device.id : device;
           const deviceObj = devices[deviceId];
           const displayName = deviceObj ? deviceObj.displayName : deviceId;
+          const currentIcon =
+            typeof device == "object" && device.icon
+              ? device.icon
+              : iconOptions[index % iconOptions.length];
 
           const itemDiv = document.createElement("div");
           itemDiv.style.display = "flex";
           itemDiv.style.alignItems = "center";
           itemDiv.style.marginBottom = "5px";
+          itemDiv.style.gap = "5px";
 
           const label = document.createElement("span");
           label.textContent = `${index + 1}. ${displayName}`;
           label.style.flex = "1";
+
+          const iconSelect = document.createElement("select");
+          iconSelect.style.minWidth = "80px";
+          iconOptions.forEach((icon) => {
+            const option = document.createElement("option");
+            option.value = icon;
+            option.textContent = icon.charAt(0).toUpperCase() + icon.slice(1);
+            if (icon === currentIcon) {
+              option.selected = true;
+            }
+            iconSelect.appendChild(option);
+          });
+          iconSelect.onchange = () => {
+            if (typeof configuredDevices[index] === "object") {
+              configuredDevices[index].icon = iconSelect.value;
+            } else {
+              configuredDevices[index] = {
+                id: configuredDevices[index],
+                icon: iconSelect.value,
+              };
+            }
+            settings.devices = configuredDevices;
+            saveSettings();
+          };
 
           const removeBtn = document.createElement("button");
           removeBtn.textContent = "Remove";
           removeBtn.onclick = () => removeDevice(index);
 
           itemDiv.appendChild(label);
+          itemDiv.appendChild(iconSelect);
           itemDiv.appendChild(removeBtn);
           deviceListDiv.appendChild(itemDiv);
         });

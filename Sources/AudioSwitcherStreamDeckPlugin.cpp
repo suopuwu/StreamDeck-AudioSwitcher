@@ -288,7 +288,54 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
   std::scoped_lock lock(mVisibleContextsMutex);
   for (size_t i = 0; i < deviceList.size(); ++i) {
     if (deviceList[i].id == activeDevice) {
-      mConnectionManager->SetState(static_cast<int>(i), context);
+      // Get the user-selected icon for this device
+      const auto icon = settings.GetDeviceIcon(deviceList[i].id, i);
+
+      // Map icon to state based on action type
+      int state = static_cast<int>(i);
+      if (action == SET_ACTION_ID) {
+        // For set action: active (0), inactive (1), headphones (2), speakers
+        // (3), ...
+        const std::vector<std::string> setIcons = {
+          "active",
+          "inactive",
+          "headphones",
+          "speakers",
+          "active",
+          "inactive",
+          "headphones",
+          "speakers",
+          "active",
+          "inactive"};
+        for (size_t j = 0; j < setIcons.size(); ++j) {
+          if (setIcons[j] == icon) {
+            state = static_cast<int>(j);
+            break;
+          }
+        }
+      } else {
+        // For toggle action: headphones (0), speakers (1), active (2), inactive
+        // (3), ...
+        const std::vector<std::string> toggleIcons = {
+          "headphones",
+          "speakers",
+          "active",
+          "inactive",
+          "headphones",
+          "speakers",
+          "active",
+          "inactive",
+          "headphones",
+          "speakers"};
+        for (size_t j = 0; j < toggleIcons.size(); ++j) {
+          if (toggleIcons[j] == icon) {
+            state = static_cast<int>(j);
+            break;
+          }
+        }
+      }
+
+      mConnectionManager->SetState(state, context);
       return;
     }
   }

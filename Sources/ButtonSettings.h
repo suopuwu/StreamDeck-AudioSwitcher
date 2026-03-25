@@ -7,7 +7,9 @@
 
 #include <AudioDevices/AudioDevices.h>
 
+#include <map>
 #include <nlohmann/json.hpp>
+#include <string>
 
 using namespace FredEmmott::Audio;
 
@@ -21,11 +23,14 @@ struct ButtonSettings {
   AudioDeviceRole role = AudioDeviceRole::DEFAULT;
   AudioDeviceRole secondaryRole = AudioDeviceRole::DEFAULT;
   std::vector<AudioDeviceInfo> devices;
+  std::map<std::string, std::string> deviceIcons;// device ID -> icon name
   DeviceMatchStrategy matchStrategy = DeviceMatchStrategy::ID;
   bool setBothRoles = false;
 
   // Get volatile ID for a device (handles fuzzy matching)
   std::string GetVolatileDeviceID(size_t index) const;
+  // Get icon preference for a device
+  std::string GetDeviceIcon(const std::string& deviceId, size_t index) const;
 };
 
 void from_json(const nlohmann::json&, ButtonSettings&);

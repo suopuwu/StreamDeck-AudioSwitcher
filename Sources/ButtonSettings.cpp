@@ -37,7 +37,23 @@ void from_json(const nlohmann::json& j, ButtonSettings& bs) {
   }
 
   if (j.contains("devices")) {
-    bs.devices = j.at("devices").get<std::vector<AudioDeviceInfo>>();
+    const auto& devicesJson = j.at("devices");
+    if (devicesJson.is_array()) {
+      for (const auto& deviceJson : devicesJson) {
+        AudioDeviceInfo device;
+        if (deviceJson.is_string()) {
+          device.id = deviceJson;
+        } else {
+          device = deviceJson.get<AudioDeviceInfo>();
+          // Extract icon preference if present
+          if (deviceJson.contains("icon")) {
+            bs.deviceIcons[device.id]
+              = deviceJson.at("icon").get<std::string>();
+          }
+        }
+        bs.devices.push_back(device);
+      }
+    }
   } else {
     // Migrate from old primary/secondary format
     if (j.contains("primary")) {
@@ -145,4 +161,19 @@ std::string ButtonSettings::GetVolatileDeviceID(size_t index) const {
     return {};
   }
   return GetVolatileID(devices[index], matchStrategy);
+}
+
+std::string ButtonSettings::GetDeviceIcon(
+  const std::string& deviceId,
+  size_t index) const {
+  // Check if there's a stored icon preference for this device
+  const auto it = deviceIcons.find(deviceId);
+  if (it != deviceIcons.end()) {
+    return it->second;
+  }
+
+  // Default: cycle through icons based on index
+  const std::vector<std::string> defaultIcons
+    = {"headphones", "speakers", "active", "inactive"};
+  return defaultIcons[index % defaultIcons.size()];
 }

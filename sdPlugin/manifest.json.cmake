@@ -2,17 +2,21 @@
   "Actions": [
     {
       "States": [
-        {
-          "Image": "headphones"
-        },
-        {
-          "Image": "speakers"
-        }
+        {"Image": "headphones"},
+        {"Image": "speakers"},
+        {"Image": "active"},
+        {"Image": "inactive"},
+        {"Image": "headphones"},
+        {"Image": "speakers"},
+        {"Image": "active"},
+        {"Image": "inactive"},
+        {"Image": "headphones"},
+        {"Image": "speakers"}
       ],
       "SupportedInMultiActions": false,
       "Icon": "headphones",
       "Name": "Toggle Audio Device",
-      "Tooltip": "Switch between two audio devices.",
+      "Tooltip": "Switch between audio devices.",
       "UUID": "com.fredemmott.audiooutputswitch.toggle"
     },
     {
@@ -22,12 +26,16 @@
       "Tooltip": "Set a specific audio device",
       "UUID": "com.fredemmott.audiooutputswitch.set",
       "States": [
-        {
-          "Image": "active"
-        },
-        {
-          "Image": "inactive"
-        }
+        {"Image": "active"},
+        {"Image": "inactive"},
+        {"Image": "headphones"},
+        {"Image": "speakers"},
+        {"Image": "active"},
+        {"Image": "inactive"},
+        {"Image": "headphones"},
+        {"Image": "speakers"},
+        {"Image": "active"},
+        {"Image": "inactive"}
       ]
     }
   ],
