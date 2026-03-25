@@ -19,13 +19,11 @@ enum class DeviceMatchStrategy {
 struct ButtonSettings {
   AudioDeviceDirection direction = AudioDeviceDirection::INPUT;
   AudioDeviceRole role = AudioDeviceRole::DEFAULT;
-  AudioDeviceInfo primaryDevice;
-  AudioDeviceInfo secondaryDevice;
+  std::vector<AudioDeviceInfo> devices;
   DeviceMatchStrategy matchStrategy = DeviceMatchStrategy::ID;
 
-  // Changes if there's a fuzzy match
-  std::string VolatilePrimaryID() const;
-  std::string VolatileSecondaryID() const;
+  // Get volatile ID for a device (handles fuzzy matching)
+  std::string GetVolatileDeviceID(size_t index) const;
 };
 
 void from_json(const nlohmann::json&, ButtonSettings&);

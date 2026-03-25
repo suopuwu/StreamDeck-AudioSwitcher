@@ -61,8 +61,9 @@ AudioSwitcherStreamDeckPlugin::AudioSwitcherStreamDeckPlugin() {
   CoInitializeEx(
     NULL, COINIT_MULTITHREADED);// initialize COM for the main thread
 #endif
-  mCallbackHandle = AddDefaultAudioDeviceChangeCallback(std::bind_front(
-    &AudioSwitcherStreamDeckPlugin::OnDefaultDeviceChanged, this));
+  mCallbackHandle = AddDefaultAudioDeviceChangeCallback(
+    std::bind_front(
+      &AudioSwitcherStreamDeckPlugin::OnDefaultDeviceChanged, this));
 }
 
 AudioSwitcherStreamDeckPlugin::~AudioSwitcherStreamDeckPlugin() {
@@ -108,13 +109,30 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
   settings = inPayload.at("settings");
   FillButtonDeviceInfo(inContext);
 
+  // Get list of configured devices
+  const auto& deviceList = settings.devices;
+  if (deviceList.empty()) {
+    ESDDebug("No devices configured");
+    return;
+  }
+
   const auto state = EPLJSONUtils::GetIntByName(inPayload, "state");
-  // this looks inverted - but if state is 0, we want to move to state 1, so
-  // we want the secondary devices. if state is 1, we want state 0, so we want
-  // the primary device
-  const auto deviceID = (state != 0 || inAction == SET_ACTION_ID)
-    ? settings.VolatilePrimaryID()
-    : settings.VolatileSecondaryID();
+
+  // Find the next device in the list
+  const auto currentDevice
+    = GetDefaultAudioDeviceID(settings.direction, settings.role);
+  int nextIndex = 0;
+
+  for (size_t i = 0; i < deviceList.size(); ++i) {
+    if (deviceList[i].id == currentDevice) {
+      nextIndex = (i + 1) % deviceList.size();
+      break;
+    }
+  }
+
+  const auto& nextDevice = deviceList[nextIndex];
+  const auto deviceID = settings.GetVolatileDeviceID(nextIndex);
+
   if (deviceID.empty()) {
     ESDDebug("Doing nothing, no device ID");
     return;
@@ -122,19 +140,7 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
 
   const auto deviceState = GetAudioDeviceState(deviceID);
   if (deviceState != AudioDeviceState::CONNECTED) {
-    if (inAction == SET_ACTION_ID) {
-      mConnectionManager->SetState(1, inContext);
-    }
     mConnectionManager->ShowAlertForContext(inContext);
-    return;
-  }
-
-  if (
-    inAction == SET_ACTION_ID
-    && deviceID == GetDefaultAudioDeviceID(settings.direction, settings.role)) {
-    // We already have the correct device, undo the state change
-    mConnectionManager->SetState(state, inContext);
-    ESDDebug("Already set, nothing to do");
     return;
   }
 
@@ -166,9 +172,14 @@ void AudioSwitcherStreamDeckPlugin::FillButtonDeviceInfo(
   const std::string& context) {
   auto& settings = mButtons.at(context).settings;
 
-  const auto filledPrimary = FillAudioDeviceInfo(settings.primaryDevice);
-  const auto filledSecondary = FillAudioDeviceInfo(settings.secondaryDevice);
-  if (filledPrimary || filledSecondary) {
+  bool needsUpdate = false;
+  for (auto& device : settings.devices) {
+    if (FillAudioDeviceInfo(device)) {
+      needsUpdate = true;
+    }
+  }
+
+  if (needsUpdate) {
     ESDDebug("Backfilling settings to {}", json(settings).dump());
     mConnectionManager->SetSettings(settings, context);
   }
@@ -208,6 +219,34 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
       }));
     return;
   }
+
+  if (event == "addDevice") {
+    std::scoped_lock lock(mVisibleContextsMutex);
+    if (mButtons.contains(inContext)) {
+      auto& settings = mButtons[inContext].settings;
+      if (inPayload.contains("device")) {
+        AudioDeviceInfo newDevice = inPayload.at("device");
+        FillAudioDeviceInfo(newDevice);
+        settings.devices.push_back(newDevice);
+        mConnectionManager->SetSettings(settings, inContext);
+      }
+    }
+    return;
+  }
+
+  if (event == "removeDevice") {
+    std::scoped_lock lock(mVisibleContextsMutex);
+    if (mButtons.contains(inContext) && inPayload.contains("index")) {
+      auto& settings = mButtons[inContext].settings;
+      size_t index = inPayload.at("index");
+      if (index < settings.devices.size()) {
+        settings.devices.erase(settings.devices.begin() + index);
+        mConnectionManager->SetSettings(settings, inContext);
+        UpdateState(inContext);
+      }
+    }
+    return;
+  }
 }
 
 void AudioSwitcherStreamDeckPlugin::UpdateState(
@@ -220,25 +259,22 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
     ? GetDefaultAudioDeviceID(settings.direction, settings.role)
     : optionalDefaultDevice;
 
-  const auto primaryID = settings.VolatilePrimaryID();
-  const auto secondaryID = settings.VolatileSecondaryID();
+  const auto& deviceList = settings.devices;
+  if (deviceList.empty()) {
+    mConnectionManager->ShowAlertForContext(context);
+    return;
+  }
 
+  // Find which device is active and set state accordingly
   std::scoped_lock lock(mVisibleContextsMutex);
-  if (action == SET_ACTION_ID) {
-    mConnectionManager->SetState(activeDevice == primaryID ? 0 : 1, context);
-    return;
+  for (size_t i = 0; i < deviceList.size(); ++i) {
+    if (deviceList[i].id == activeDevice) {
+      mConnectionManager->SetState(static_cast<int>(i), context);
+      return;
+    }
   }
 
-  if (activeDevice == primaryID) {
-    mConnectionManager->SetState(0, context);
-    return;
-  }
-
-  if (activeDevice == secondaryID) {
-    mConnectionManager->SetState(1, context);
-    return;
-  }
-
+  // Active device not in list
   mConnectionManager->ShowAlertForContext(context);
 }
 

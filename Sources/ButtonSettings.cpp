@@ -8,9 +8,9 @@
 
 #include <StreamDeckSDK/ESDLogger.h>
 
-#include "audio_json.h"
-
 #include <regex>
+
+#include "audio_json.h"
 
 NLOHMANN_JSON_SERIALIZE_ENUM(
   DeviceMatchStrategy,
@@ -30,21 +30,29 @@ void from_json(const nlohmann::json& j, ButtonSettings& bs) {
     bs.role = j.at("role");
   }
 
-  if (j.contains("primary")) {
-    const auto& primary = j.at("primary");
-    if (primary.is_string()) {
-      bs.primaryDevice.id = primary;
-    } else {
-      bs.primaryDevice = primary;
+  if (j.contains("devices")) {
+    bs.devices = j.at("devices").get<std::vector<AudioDeviceInfo>>();
+  } else {
+    // Migrate from old primary/secondary format
+    if (j.contains("primary")) {
+      const auto& primary = j.at("primary");
+      AudioDeviceInfo device;
+      if (primary.is_string()) {
+        device.id = primary;
+      } else {
+        device = primary;
+      }
+      bs.devices.push_back(device);
     }
-  }
-
-  if (j.contains("secondary")) {
-    const auto& secondary = j.at("secondary");
-    if (secondary.is_string()) {
-      bs.secondaryDevice.id = secondary;
-    } else {
-      bs.secondaryDevice = secondary;
+    if (j.contains("secondary")) {
+      const auto& secondary = j.at("secondary");
+      AudioDeviceInfo device;
+      if (secondary.is_string()) {
+        device.id = secondary;
+      } else {
+        device = secondary;
+      }
+      bs.devices.push_back(device);
     }
   }
 
@@ -57,8 +65,7 @@ void to_json(nlohmann::json& j, const ButtonSettings& bs) {
   j = {
     {"direction", bs.direction},
     {"role", bs.role},
-    {"primary", bs.primaryDevice},
-    {"secondary", bs.secondaryDevice},
+    {"devices", bs.devices},
     {"matchStrategy", bs.matchStrategy},
   };
 }
@@ -67,11 +74,11 @@ namespace {
 
 std::string FuzzifyInterface(const std::string& name) {
   // Windows likes to replace "Foo" with "2- Foo"
-  const std::regex pattern {"^([0-9]+- )?(.+)$"};
+  const std::regex pattern{"^([0-9]+- )?(.+)$"};
   std::smatch captures;
   if (!std::regex_match(name, captures, pattern)) {
     return name;
-  } 
+  }
   return captures[2];
 }
 
@@ -91,7 +98,10 @@ std::string GetVolatileID(
   }
 
   const auto fuzzyInterface = FuzzifyInterface(device.interfaceName);
-  ESDDebug("Looking for a fuzzy match: {} -> {}", device.interfaceName, fuzzyInterface);
+  ESDDebug(
+    "Looking for a fuzzy match: {} -> {}",
+    device.interfaceName,
+    fuzzyInterface);
 
   for (const auto& [otherID, other] : GetAudioDeviceList(device.direction)) {
     if (other.state != AudioDeviceState::CONNECTED) {
@@ -115,10 +125,9 @@ std::string GetVolatileID(
 }
 }// namespace
 
-std::string ButtonSettings::VolatilePrimaryID() const {
-  return GetVolatileID(primaryDevice, matchStrategy);
-}
-
-std::string ButtonSettings::VolatileSecondaryID() const {
-  return GetVolatileID(secondaryDevice, matchStrategy);
+std::string ButtonSettings::GetVolatileDeviceID(size_t index) const {
+  if (index >= devices.size()) {
+    return {};
+  }
+  return GetVolatileID(devices[index], matchStrategy);
 }
