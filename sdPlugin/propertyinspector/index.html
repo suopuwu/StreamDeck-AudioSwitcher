@@ -265,10 +265,13 @@
           settings.devices = configuredDevices;
           updateConfiguredDevicesList(devices);
           saveSettings();
+          deviceSelector.value = "";
           $SD.api.sendToPlugin(uuid, actionInfo, {
             event: "addDevice",
             device: device,
           });
+          // Request device list to refresh UI
+          $SD.api.sendToPlugin(uuid, actionInfo, { event: "getDeviceList" });
         }
       }
 
@@ -284,6 +287,8 @@
           event: "removeDevice",
           index: index,
         });
+        // Request device list to refresh UI
+        $SD.api.sendToPlugin(uuid, actionInfo, { event: "getDeviceList" });
       }
 
       function updateDirection() {
