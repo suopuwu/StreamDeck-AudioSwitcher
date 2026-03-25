@@ -79,7 +79,13 @@ void AudioSwitcherStreamDeckPlugin::OnDefaultDeviceChanged(
     if (button.settings.direction != direction) {
       continue;
     }
-    if (button.settings.role != role) {
+    if (button.settings.setBothRoles) {
+      // Match if either role matches
+      if (
+        button.settings.role != role && button.settings.secondaryRole != role) {
+        continue;
+      }
+    } else if (button.settings.role != role) {
       continue;
     }
     UpdateState(context, device);
@@ -119,8 +125,12 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
   const auto state = EPLJSONUtils::GetIntByName(inPayload, "state");
 
   // Find the next device in the list
-  const auto currentDevice
+  auto currentDevice
     = GetDefaultAudioDeviceID(settings.direction, settings.role);
+  if (currentDevice.empty() && settings.setBothRoles) {
+    currentDevice
+      = GetDefaultAudioDeviceID(settings.direction, settings.secondaryRole);
+  }
   int nextIndex = 0;
 
   for (size_t i = 0; i < deviceList.size(); ++i) {
@@ -146,6 +156,10 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
 
   ESDDebug("Setting device to {}", deviceID);
   SetDefaultAudioDeviceID(settings.direction, settings.role, deviceID);
+  if (settings.setBothRoles) {
+    SetDefaultAudioDeviceID(
+      settings.direction, settings.secondaryRole, deviceID);
+  }
 }
 
 void AudioSwitcherStreamDeckPlugin::WillAppearForAction(
@@ -255,9 +269,14 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
   const auto button = mButtons[context];
   const auto action = button.action;
   const auto settings = button.settings;
-  const auto activeDevice = optionalDefaultDevice.empty()
+  auto activeDevice = optionalDefaultDevice.empty()
     ? GetDefaultAudioDeviceID(settings.direction, settings.role)
     : optionalDefaultDevice;
+
+  if (activeDevice.empty() && settings.setBothRoles) {
+    activeDevice
+      = GetDefaultAudioDeviceID(settings.direction, settings.secondaryRole);
+  }
 
   const auto& deviceList = settings.devices;
   if (deviceList.empty()) {

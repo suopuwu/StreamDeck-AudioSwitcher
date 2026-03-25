@@ -69,6 +69,18 @@
               ><span></span>Communications</label
             >
           </span>
+          <span class="sdpi-item-child">
+            <input
+              id="bothRole"
+              type="radio"
+              name="role"
+              value="both"
+              onchange="saveSettings()"
+            />
+            <label for="bothRole" class="sdpi-item-label"
+              ><span></span>Both</label
+            >
+          </span>
         </div>
       </div>
       <div type="select" class="sdpi-item">
@@ -119,9 +131,12 @@
         document.getElementById("input").checked = isInput;
         document.getElementById("output").checked = !isInput;
 
-        const isCommunication = settings.role == "communication";
-        document.getElementById("communicationRole").checked = isCommunication;
-        document.getElementById("defaultRole").checked = !isCommunication;
+        const roleValue = settings.role || "default";
+        document.getElementById("defaultRole").checked =
+          roleValue === "default";
+        document.getElementById("communicationRole").checked =
+          roleValue === "communication";
+        document.getElementById("bothRole").checked = roleValue === "both";
 
         const matchStrategy = settings.matchStrategy || "ID";
         for (const child of document.getElementById("matchStrategy").children) {
@@ -317,9 +332,15 @@
       function saveSettings() {
         const isInput = document.getElementById("input").checked;
         settings.direction = isInput ? "input" : "output";
-        settings.role = document.getElementById("defaultRole").checked
-          ? "default"
-          : "communication";
+
+        if (document.getElementById("defaultRole").checked) {
+          settings.role = "default";
+        } else if (document.getElementById("communicationRole").checked) {
+          settings.role = "communication";
+        } else if (document.getElementById("bothRole").checked) {
+          settings.role = "both";
+        }
+
         settings.matchStrategy = document.getElementById("matchStrategy").value;
         console.log(settings);
         $SD.api.setSettings(uuid, settings);

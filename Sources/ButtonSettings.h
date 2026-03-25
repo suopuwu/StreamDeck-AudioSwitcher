@@ -19,8 +19,10 @@ enum class DeviceMatchStrategy {
 struct ButtonSettings {
   AudioDeviceDirection direction = AudioDeviceDirection::INPUT;
   AudioDeviceRole role = AudioDeviceRole::DEFAULT;
+  AudioDeviceRole secondaryRole = AudioDeviceRole::DEFAULT;
   std::vector<AudioDeviceInfo> devices;
   DeviceMatchStrategy matchStrategy = DeviceMatchStrategy::ID;
+  bool setBothRoles = false;
 
   // Get volatile ID for a device (handles fuzzy matching)
   std::string GetVolatileDeviceID(size_t index) const;
