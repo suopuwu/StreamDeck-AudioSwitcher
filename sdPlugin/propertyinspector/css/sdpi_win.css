@@ -214,8 +214,8 @@ input[type=file]::-webkit-file-upload-button,
 button {
   border: 1pt solid var(--sdpi-color);
   border-radius: var(--sdpi-borderradius);
-  min-height: 23px;
-  height: 23px;
+  min-height: 23px !important;
+  height: 23px !important;
   margin-right: 8px;
 }
 
