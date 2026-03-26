@@ -564,50 +564,80 @@
         for (const [name, data] of Object.entries(customImages)) {
           const item = document.createElement("div");
           item.className = "icon-item";
+          item.style.display = "flex";
+          item.style.flexDirection = "column";
           item.style.cursor = "pointer";
-          item.style.backgroundImage = `url('${data}')`;
-          item.style.backgroundSize = "cover";
           item.style.position = "relative";
+          item.style.backgroundColor = "#3a3a3a";
+          item.style.width = "100px";
 
-          // Create a wrapper for the name
+          // Create header with name and delete button
+          const header = document.createElement("div");
+          header.style.display = "flex";
+          header.style.justifyContent = "space-between";
+          header.style.alignItems = "center";
+          header.style.padding = "5px";
+          header.style.borderBottom = "1px solid #555";
+
+          // Image name
           const nameSpan = document.createElement("span");
           nameSpan.className = "icon-item-name";
           nameSpan.textContent = name;
-          item.appendChild(nameSpan);
+          nameSpan.style.flex = "1";
+          nameSpan.style.fontSize = "11px";
+          nameSpan.style.overflow = "hidden";
+          nameSpan.style.textOverflow = "ellipsis";
+          nameSpan.style.whiteSpace = "nowrap";
+          header.appendChild(nameSpan);
 
-          // Create delete button
+          // Delete button
           const deleteBtn = document.createElement("button");
           deleteBtn.className = "delete-icon-btn";
           deleteBtn.title = "Delete custom image";
           deleteBtn.innerHTML = "✕";
-          deleteBtn.style.position = "absolute";
-          deleteBtn.style.top = "5px";
-          deleteBtn.style.right = "5px";
-          deleteBtn.style.width = "24px";
-          deleteBtn.style.height = "24px";
+          deleteBtn.style.width = "20px";
+          deleteBtn.style.height = "20px !important";
+          deleteBtn.style.minWidth = "20px";
+          deleteBtn.style.minHeight = "20px !important";
           deleteBtn.style.padding = "0";
+          deleteBtn.style.marginLeft = "5px";
           deleteBtn.style.borderRadius = "50%";
           deleteBtn.style.backgroundColor = "rgba(255, 0, 0, 0.8)";
           deleteBtn.style.color = "white";
           deleteBtn.style.border = "none";
-          deleteBtn.style.fontSize = "14px";
+          deleteBtn.style.fontSize = "12px";
+          deleteBtn.style.lineHeight = "1";
           deleteBtn.style.cursor = "pointer";
-          deleteBtn.style.opacity = "0";
-          deleteBtn.style.transition = "opacity 0.2s";
+          deleteBtn.style.transition = "background-color 0.2s";
+          deleteBtn.style.flexShrink = "0";
+          deleteBtn.style.flexGrow = "0";
+          deleteBtn.style.alignSelf = "center";
+          deleteBtn.style.display = "flex";
+          deleteBtn.style.alignItems = "center";
+          deleteBtn.style.justifyContent = "center";
+          deleteBtn.onmouseenter = () => {
+            deleteBtn.style.backgroundColor = "rgba(255, 0, 0, 1)";
+          };
+          deleteBtn.onmouseleave = () => {
+            deleteBtn.style.backgroundColor = "rgba(255, 0, 0, 0.8)";
+          };
           deleteBtn.onclick = (e) => {
             e.stopPropagation();
             console.log("Delete button clicked for:", name);
             deleteImage(name);
           };
-          item.appendChild(deleteBtn);
+          header.appendChild(deleteBtn);
+          item.appendChild(header);
 
-          // Show delete button on hover
-          item.onmouseenter = () => {
-            deleteBtn.style.opacity = "1";
-          };
-          item.onmouseleave = () => {
-            deleteBtn.style.opacity = "0";
-          };
+          // Image preview container
+          const imagePreview = document.createElement("div");
+          imagePreview.style.width = "100%";
+          imagePreview.style.height = "100px";
+          imagePreview.style.backgroundImage = `url('${data}')`;
+          imagePreview.style.backgroundSize = "cover";
+          imagePreview.style.backgroundPosition = "center";
+          imagePreview.style.cursor = "pointer";
+          item.appendChild(imagePreview);
 
           item.onclick = (e) => {
             e.stopPropagation();
