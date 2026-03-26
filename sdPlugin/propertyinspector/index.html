@@ -567,7 +567,48 @@
           item.style.cursor = "pointer";
           item.style.backgroundImage = `url('${data}')`;
           item.style.backgroundSize = "cover";
-          item.innerHTML = `<span class="icon-item-name">${name}</span>`;
+          item.style.position = "relative";
+
+          // Create a wrapper for the name
+          const nameSpan = document.createElement("span");
+          nameSpan.className = "icon-item-name";
+          nameSpan.textContent = name;
+          item.appendChild(nameSpan);
+
+          // Create delete button
+          const deleteBtn = document.createElement("button");
+          deleteBtn.className = "delete-icon-btn";
+          deleteBtn.title = "Delete custom image";
+          deleteBtn.innerHTML = "✕";
+          deleteBtn.style.position = "absolute";
+          deleteBtn.style.top = "5px";
+          deleteBtn.style.right = "5px";
+          deleteBtn.style.width = "24px";
+          deleteBtn.style.height = "24px";
+          deleteBtn.style.padding = "0";
+          deleteBtn.style.borderRadius = "50%";
+          deleteBtn.style.backgroundColor = "rgba(255, 0, 0, 0.8)";
+          deleteBtn.style.color = "white";
+          deleteBtn.style.border = "none";
+          deleteBtn.style.fontSize = "14px";
+          deleteBtn.style.cursor = "pointer";
+          deleteBtn.style.opacity = "0";
+          deleteBtn.style.transition = "opacity 0.2s";
+          deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            console.log("Delete button clicked for:", name);
+            deleteImage(name);
+          };
+          item.appendChild(deleteBtn);
+
+          // Show delete button on hover
+          item.onmouseenter = () => {
+            deleteBtn.style.opacity = "1";
+          };
+          item.onmouseleave = () => {
+            deleteBtn.style.opacity = "0";
+          };
+
           item.onclick = (e) => {
             e.stopPropagation();
             console.log("Clicked custom image:", name);
@@ -625,6 +666,37 @@
           console.error("No device selected in icon picker");
         }
         closeIconPicker();
+      }
+
+      function deleteImage(imageName) {
+        console.log("deleteImage called for:", imageName);
+
+        // Remove from local customImages
+        delete customImages[imageName];
+
+        // Remove any device icon references
+        const configuredDevices = settings["devices"] || [];
+        for (const device of configuredDevices) {
+          if (typeof device === "object" && device.icon === imageName) {
+            delete device.icon; // Clear the icon selection
+          }
+        }
+
+        // Update settings
+        settings.customImages = customImages;
+        settings.devices = configuredDevices;
+        saveSettings();
+
+        // Notify plugin to delete the image
+        console.log("Sending deleteImage event to plugin for:", imageName);
+        $SD.api.sendToPlugin(uuid, actionInfo, {
+          event: "deleteImage",
+          imageName: imageName,
+        });
+
+        // Refresh the icon picker UI by re-populating it
+        populateIconPicker();
+        console.log("Custom image deleted and UI refreshed");
       }
 
       // File upload and drag-drop

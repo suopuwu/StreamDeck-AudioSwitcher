@@ -370,6 +370,36 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
     UpdateState(inContext);
     return;
   }
+
+  if (event == "deleteImage") {
+    // Handle custom image deletion
+    if (!inPayload.contains("imageName")) {
+      return;
+    }
+    
+    const auto imageName = EPLJSONUtils::GetStringByName(inPayload, "imageName");
+    ESDDebug("deleteImage event: removing custom image: {}", imageName);
+    
+    {
+      std::scoped_lock lock(mVisibleContextsMutex);
+      if (mButtons.contains(inContext)) {
+        auto& settings = mButtons[inContext].settings;
+        // Remove from customImages map
+        settings.customImages.erase(imageName);
+        ESDDebug("Deleted custom image: {}", imageName);
+      }
+    }
+    
+    // Also notify the property inspector that deletion is complete
+    mConnectionManager->SendToPropertyInspector(
+      inAction,
+      inContext,
+      json({
+        {"event", "imageDeleted"},
+        {"imageName", imageName},
+      }));
+    return;
+  }
 }
 
 void AudioSwitcherStreamDeckPlugin::UpdateState(
