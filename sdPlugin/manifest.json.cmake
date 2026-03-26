@@ -1,4 +1,5 @@
 {
+  "UUID": "com.suop.audiocycle",
   "Actions": [
     {
       "States": [
@@ -11,12 +12,11 @@
       "Icon": "headphones",
       "Name": "Cycle Audio Device",
       "Tooltip": "Cycle between audio devices.",
-      "UUID": "com.suop.audioswitcher.cycle"
+      "UUID": "com.suop.audiocycle.cycle"
     }
   ],
   "Author": "suop",
-  "CodePathMac": "sdaudioswitch",
-  "CodePathWin": "sdaudioswitch.exe",
+  "CodePath": "sdaudioswitch.exe",
   "Description": "Cycle between multiple audio devices. Fork of Fred Emmott's Audio Switcher.",
   "Name": "Audio Switcher (suop)",
   "PropertyInspectorPath": "propertyinspector/index.html",
@@ -36,6 +36,6 @@
   ],
   "SDKVersion": 2,
   "Software": {
-    "MinimumVersion": "4.1"
+    "MinimumVersion": "6.4"
   }
 }
