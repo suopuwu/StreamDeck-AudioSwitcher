@@ -4,21 +4,11 @@
       "States": [
         {"Image": "headphones"}
       ],
-      "SupportedInMultiActions": false,
-      "Icon": "headphones",
-      "Name": "Toggle Audio Device",
-      "Tooltip": "Switch between audio devices.",
-      "UUID": "com.suop.audioswitcher.toggle"
-    },
-    {
       "SupportedInMultiActions": true,
-      "Icon": "active",
-      "Name": "Set Audio Device",
-      "Tooltip": "Set a specific audio device",
-      "UUID": "com.suop.audioswitcher.set",
-      "States": [
-        {"Image": "active"}
-      ]
+      "Icon": "headphones",
+      "Name": "Cycle Audio Device",
+      "Tooltip": "Cycle between audio devices.",
+      "UUID": "com.suop.audioswitcher.cycle"
     }
   ],
   "Author": "suop",
