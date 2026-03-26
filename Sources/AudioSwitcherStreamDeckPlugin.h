@@ -80,10 +80,18 @@ class AudioSwitcherStreamDeckPlugin : public ESDBasePlugin {
   std::map<std::string, Button> mButtons;
   DefaultChangeCallbackHandle mCallbackHandle;
 
+  // Global custom image store (shared across all buttons).
+  // Keyed by short name (e.g. "img1") → base64 data URL.
+  std::map<std::string, std::string> mCustomImages;
+  std::string mCustomImagesPath;// path to the JSON file on disk
+
   void OnDefaultDeviceChanged(
     AudioDeviceDirection direction,
     AudioDeviceRole role,
     const std::string& activeAudioDeviceID);
   void UpdateState(const std::string& context, const std::string& device = "");
   void FillButtonDeviceInfo(const std::string& context);
+
+  void LoadCustomImages();
+  void SaveCustomImages();
 };

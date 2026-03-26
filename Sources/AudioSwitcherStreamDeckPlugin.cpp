@@ -88,6 +88,21 @@ AudioSwitcherStreamDeckPlugin::AudioSwitcherStreamDeckPlugin() {
   CoInitializeEx(
     NULL, COINIT_MULTITHREADED);// initialize COM for the main thread
 #endif
+
+  // Determine the path for our custom images file.
+  // Place it next to the executable so it persists across restarts.
+  {
+    char exePath[MAX_PATH] = {};
+    GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+    std::string dir(exePath);
+    auto pos = dir.find_last_of("\\/");
+    if (pos != std::string::npos) {
+      dir = dir.substr(0, pos);
+    }
+    mCustomImagesPath = dir + "\\custom_images.json";
+  }
+  LoadCustomImages();
+
   mCallbackHandle = AddDefaultAudioDeviceChangeCallback(
     std::bind_front(
       &AudioSwitcherStreamDeckPlugin::OnDefaultDeviceChanged, this));
@@ -139,7 +154,13 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
     return;
   }
   auto& settings = mButtons[inContext].settings;
+  // Preserve in-memory deviceIcons before overwriting,
+  // as they may not yet be persisted back from the most recent SetSettings
+  const auto savedDeviceIcons = settings.deviceIcons;
   settings = inPayload.at("settings");
+  if (settings.deviceIcons.empty() && !savedDeviceIcons.empty()) {
+    settings.deviceIcons = savedDeviceIcons;
+  }
   FillButtonDeviceInfo(inContext);
 
   // Get list of configured devices
@@ -201,6 +222,15 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
     "Found next connected device at index {}. Setting device to {}",
     nextIndex,
     deviceID);
+
+  // Update the button visual BEFORE changing the audio device.
+  // This prevents the "flash" of the default icon — otherwise the
+  // visual only updates when the async OnDefaultDeviceChanged callback
+  // fires, which races with DidReceiveSettings overwriting state.
+  // Use the stored device ID (not the volatile one) so UpdateState
+  // can match it against deviceList entries.
+  UpdateState(inContext, deviceList[nextIndex].id);
+
   SetDefaultAudioDeviceID(settings.direction, settings.role, deviceID);
   if (settings.setBothRoles) {
     SetDefaultAudioDeviceID(
@@ -360,9 +390,7 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
   }
 
   if (event == "updateState") {
-    // Update the button state when icon selection changes
-    // The UI sends the new icon and device index directly to avoid timing
-    // issues
+    // Update the button state when icon selection changes.
     {
       std::scoped_lock lock(mVisibleContextsMutex);
       if (mButtons.contains(inContext)) {
@@ -377,62 +405,61 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
           auto& settings = mButtons[inContext].settings;
           if (deviceIndex < settings.devices.size()) {
             const auto& device = settings.devices[deviceIndex];
-            // Update the deviceIcons map with the new icon
             settings.deviceIcons[device.id] = newIcon;
-            ESDDebug(
-              "updateState: mapped device.id='{}' to icon='{}'",
-              device.id,
-              newIcon);
-            ESDDebug(
-              "updateState: deviceIcons now has {} entries",
-              settings.deviceIcons.size());
-
-            // Verify the mapping exists
-            if (
-              settings.customImages.find(newIcon)
-              != settings.customImages.end()) {
-              ESDDebug(
-                "updateState: custom image '{}' is present in customImages",
-                newIcon);
-            } else {
-              ESDDebug(
-                "updateState: WARNING - custom image '{}' NOT FOUND in "
-                "customImages!",
-                newIcon);
-            }
           }
         }
       }
     }
-    // Persist the updated settings back to StreamDeck
-    const auto button = mButtons[inContext];
-    mConnectionManager->SetSettings(button.settings, inContext);
-    // Call UpdateState without holding the lock (it will acquire its own)
     UpdateState(inContext);
     return;
   }
 
+  if (event == "storeCustomImage") {
+    // Store a custom image sent from the property inspector.
+    // Images are stored globally (not per-button) and saved to disk.
+    if (inPayload.contains("name") && inPayload.contains("data")) {
+      const auto name = EPLJSONUtils::GetStringByName(inPayload, "name");
+      const auto data = EPLJSONUtils::GetStringByName(inPayload, "data");
+      ESDDebug("storeCustomImage: {} ({} bytes)", name, data.size());
+      mCustomImages[name] = data;
+      SaveCustomImages();
+    }
+    return;
+  }
+
+  if (event == "getCustomImages") {
+    // Send the full custom images catalog to the property inspector.
+    // Each image is sent individually to avoid a single huge message.
+    for (const auto& [name, data] : mCustomImages) {
+      mConnectionManager->SendToPropertyInspector(
+        inAction,
+        inContext,
+        json({
+          {"event", "customImage"},
+          {"name", name},
+          {"data", data},
+        }));
+    }
+    // Signal that all images have been sent
+    mConnectionManager->SendToPropertyInspector(
+      inAction,
+      inContext,
+      json({
+        {"event", "customImagesDone"},
+      }));
+    return;
+  }
+
   if (event == "deleteImage") {
-    // Handle custom image deletion
     if (!inPayload.contains("imageName")) {
       return;
     }
-
     const auto imageName
       = EPLJSONUtils::GetStringByName(inPayload, "imageName");
-    ESDDebug("deleteImage event: removing custom image: {}", imageName);
+    ESDDebug("deleteImage: removing {}", imageName);
+    mCustomImages.erase(imageName);
+    SaveCustomImages();
 
-    {
-      std::scoped_lock lock(mVisibleContextsMutex);
-      if (mButtons.contains(inContext)) {
-        auto& settings = mButtons[inContext].settings;
-        // Remove from customImages map
-        settings.customImages.erase(imageName);
-        ESDDebug("Deleted custom image: {}", imageName);
-      }
-    }
-
-    // Also notify the property inspector that deletion is complete
     mConnectionManager->SendToPropertyInspector(
       inAction,
       inContext,
@@ -447,6 +474,11 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
 void AudioSwitcherStreamDeckPlugin::UpdateState(
   const std::string& context,
   const std::string& optionalDefaultDevice) {
+  // Snapshot the button state under the mutex before doing anything else.
+  std::scoped_lock lock(mVisibleContextsMutex);
+  if (!mButtons.contains(context)) {
+    return;
+  }
   const auto button = mButtons[context];
   const auto action = button.action;
   const auto settings = button.settings;
@@ -466,7 +498,7 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
   }
 
   // Find which device is active and set state accordingly
-  std::scoped_lock lock(mVisibleContextsMutex);
+  // (mutex already held from the top of this function)
   for (size_t i = 0; i < deviceList.size(); ++i) {
     if (deviceList[i].id == activeDevice) {
       // Get the user-selected icon for this device
@@ -478,8 +510,8 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
         icon);
 
       // Check if this is a custom image
-      const auto customIt = settings.customImages.find(icon);
-      if (customIt != settings.customImages.end()) {
+      const auto customIt = mCustomImages.find(icon);
+      if (customIt != mCustomImages.end()) {
         // Custom image - use SetImage directly
         const auto& base64Data = customIt->second;
         ESDDebug(
@@ -522,5 +554,47 @@ void AudioSwitcherStreamDeckPlugin::DidReceiveSettings(
   const std::string& inContext,
   const json& inPayload,
   const std::string& inDeviceID) {
-  WillAppearForAction(inAction, inContext, inPayload, inDeviceID);
+  std::scoped_lock lock(mVisibleContextsMutex);
+  if (!mButtons.contains(inContext) || !inPayload.contains("settings")) {
+    return;
+  }
+  auto& settings = mButtons[inContext].settings;
+  const auto savedDeviceIcons = settings.deviceIcons;
+  settings = inPayload.at("settings");
+  if (settings.deviceIcons.empty() && !savedDeviceIcons.empty()) {
+    settings.deviceIcons = savedDeviceIcons;
+  }
+  UpdateState(inContext);
+  FillButtonDeviceInfo(inContext);
+}
+
+void AudioSwitcherStreamDeckPlugin::LoadCustomImages() {
+  std::ifstream file(mCustomImagesPath);
+  if (!file.is_open()) {
+    ESDDebug("No custom images file found at {}", mCustomImagesPath);
+    return;
+  }
+  try {
+    json j;
+    file >> j;
+    if (j.is_object()) {
+      for (auto& [name, data] : j.items()) {
+        mCustomImages[name] = data.get<std::string>();
+      }
+    }
+    ESDDebug("Loaded {} custom images from disk", mCustomImages.size());
+  } catch (const std::exception& e) {
+    ESDDebug("Failed to load custom images: {}", e.what());
+  }
+}
+
+void AudioSwitcherStreamDeckPlugin::SaveCustomImages() {
+  std::ofstream file(mCustomImagesPath);
+  if (!file.is_open()) {
+    ESDDebug("Failed to open custom images file for writing");
+    return;
+  }
+  json j(mCustomImages);
+  file << j.dump();
+  ESDDebug("Saved {} custom images to disk", mCustomImages.size());
 }

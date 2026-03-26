@@ -86,16 +86,11 @@ void from_json(const nlohmann::json& j, ButtonSettings& bs) {
     const auto& deviceIconsJson = j.at("deviceIcons");
     if (deviceIconsJson.is_object()) {
       for (auto& [deviceId, iconName] : deviceIconsJson.items()) {
-        bs.deviceIcons[deviceId] = iconName.get<std::string>();
-      }
-    }
-  }
-
-  if (j.contains("customImages")) {
-    const auto& customImagesJson = j.at("customImages");
-    if (customImagesJson.is_object()) {
-      for (auto& [name, dataUrl] : customImagesJson.items()) {
-        bs.customImages[name] = dataUrl.get<std::string>();
+        // Only use the top-level map as a fallback — per-device icon
+        // fields (read above) take priority.
+        if (!bs.deviceIcons.contains(deviceId)) {
+          bs.deviceIcons[deviceId] = iconName.get<std::string>();
+        }
       }
     }
   }
@@ -117,7 +112,6 @@ void to_json(nlohmann::json& j, const ButtonSettings& bs) {
     {"devices", bs.devices},
     {"matchStrategy", bs.matchStrategy},
     {"deviceIcons", bs.deviceIcons},
-    {"customImages", bs.customImages},
   };
 }
 

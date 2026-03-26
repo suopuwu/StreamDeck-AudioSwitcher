@@ -33,7 +33,7 @@
 
       .icon-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
         gap: 10px;
         margin: 15px 0;
       }
@@ -44,15 +44,22 @@
         align-items: center;
         padding: 10px;
         background: #3a3a3a;
-        border: 1px solid #555;
+        border: 2px solid #555;
         border-radius: 3px;
         cursor: pointer;
         transition: all 0.2s;
+        box-sizing: border-box;
+        overflow: hidden;
       }
 
       .icon-item:hover {
         background: #4a4a4a;
         border-color: #0078d4;
+      }
+
+      .icon-item.selected {
+        border-color: #0078d4;
+        background: #1a3a5c;
       }
 
       .icon-item img {
@@ -247,20 +254,48 @@
             // Crop the image to a square before storing
             cropImageToSquare(dataUrl, (croppedDataUrl) => {
               customImages[shortName] = croppedDataUrl;
-
-              // Save custom images to settings for persistence
-              if (!settings.customImages) {
-                settings.customImages = {};
-              }
-              settings.customImages[shortName] = croppedDataUrl;
               console.log(
-                `Stored custom image as: ${shortName}, persisting to settings`,
+                `Stored custom image as: ${shortName}, sending to plugin`,
               );
 
+              // Send the image to C++ for persistent storage on disk.
+              // We do NOT store it in settings — that would bloat the
+              // WebSocket messages and cause disconnects.
+              $SD.api.sendToPlugin(uuid, actionInfo, {
+                event: "storeCustomImage",
+                name: shortName,
+                data: croppedDataUrl,
+              });
+
               populateIconPicker();
-              saveSettings();
             });
           }
+          return;
+        }
+
+        // Handle individual custom image from plugin (sent on PI open)
+        if (event === "customImage") {
+          if (payload.name && payload.data) {
+            customImages[payload.name] = payload.data;
+            // Update counter
+            const match = payload.name.match(/img(\d+)/);
+            if (match) {
+              customImageCounter = Math.max(
+                customImageCounter,
+                parseInt(match[1]),
+              );
+            }
+          }
+          return;
+        }
+
+        // All custom images have been received — refresh picker if open
+        if (event === "customImagesDone") {
+          console.log(
+            "Received all custom images from plugin:",
+            Object.keys(customImages).length,
+          );
+          populateIconPicker();
           return;
         }
 
@@ -406,7 +441,7 @@
 
           const iconBtn = document.createElement("button");
           iconBtn.style.minWidth = "80px";
-          iconBtn.textContent = "Select Icon";
+          iconBtn.textContent = currentIcon;
           iconBtn.onclick = () => openIconPicker(index);
 
           const removeBtn = document.createElement("button");
@@ -500,27 +535,9 @@
           .getElementById("mainWrapper")
           .classList.add(`platform-${platform}`);
 
-        // Restore custom images from settings
-        if (settings.customImages) {
-          customImages = settings.customImages;
-          // Update counter based on restored images (extract numbers from img1, img2, etc.)
-          const imageNames = Object.keys(customImages);
-          imageNames.forEach((name) => {
-            const match = name.match(/img(\d+)/);
-            if (match) {
-              customImageCounter = Math.max(
-                customImageCounter,
-                parseInt(match[1]),
-              );
-            }
-          });
-          console.log(
-            "Restored custom images from settings:",
-            Object.keys(customImages),
-            "counter now at:",
-            customImageCounter,
-          );
-        }
+        // Restore custom images from plugin (not from settings)
+        // Request the C++ plugin to send us all stored custom images
+        $SD.api.sendToPlugin(uuid, actionInfo, { event: "getCustomImages" });
 
         // request settings and list of devices
         $SD.api.sendToPlugin(uuid, actionInfo, { event: "getDeviceList" });
@@ -539,8 +556,15 @@
         }
 
         settings.matchStrategy = document.getElementById("matchStrategy").value;
-        console.log(settings);
-        $SD.api.setSettings(uuid, settings);
+
+        // Strip customImages and deviceIcons before sending — customImages
+        // contains large base64 data that causes WebSocket disconnects,
+        // and deviceIcons is managed by C++ from per-device icon fields.
+        const settingsToSave = Object.assign({}, settings);
+        delete settingsToSave.customImages;
+        delete settingsToSave.deviceIcons;
+        console.log(settingsToSave);
+        $SD.api.setSettings(uuid, settingsToSave);
       }
 
       // Icon picker functions
@@ -563,14 +587,31 @@
         const builtinContainer = document.getElementById("builtinIcons");
         builtinContainer.innerHTML = "";
 
+        // Determine the currently selected icon for this device
+        const configuredDevices = settings["devices"] || [];
+        const defaultIcons = ["headphones", "speakers", "active", "inactive"];
+        let currentSelectedIcon = "";
+        if (
+          currentIconPickerDeviceIndex >= 0 &&
+          currentIconPickerDeviceIndex < configuredDevices.length
+        ) {
+          const dev = configuredDevices[currentIconPickerDeviceIndex];
+          currentSelectedIcon =
+            typeof dev === "object" && dev.icon
+              ? dev.icon
+              : defaultIcons[
+                  currentIconPickerDeviceIndex % defaultIcons.length
+                ];
+        }
+
         builtinIcons.forEach((iconName) => {
           const item = document.createElement("div");
-          item.className = "icon-item";
+          item.className =
+            "icon-item" + (iconName === currentSelectedIcon ? " selected" : "");
           item.style.cursor = "pointer";
           item.innerHTML = `<span class="icon-item-name">${iconName}</span>`;
           item.onclick = (e) => {
             e.stopPropagation();
-            console.log("Clicked builtin icon:", iconName);
             selectIcon(iconName);
           };
           builtinContainer.appendChild(item);
@@ -587,13 +628,16 @@
 
         for (const [name, data] of Object.entries(customImages)) {
           const item = document.createElement("div");
-          item.className = "icon-item";
+          item.className =
+            "icon-item" + (name === currentSelectedIcon ? " selected" : "");
           item.style.display = "flex";
           item.style.flexDirection = "column";
           item.style.cursor = "pointer";
           item.style.position = "relative";
-          item.style.backgroundColor = "#3a3a3a";
+          item.style.backgroundColor =
+            name === currentSelectedIcon ? "#1a3a5c" : "#3a3a3a";
           item.style.width = "100px";
+          item.style.boxSizing = "border-box";
 
           // Create header with name and delete button
           const header = document.createElement("div");
@@ -700,7 +744,6 @@
             saveSettings();
 
             // Trigger plugin to update the button state with the new icon
-            // Include the icon info directly so plugin doesn't rely on stale settings
             console.log(
               "Requesting plugin to update state for device index:",
               currentIconPickerDeviceIndex,
@@ -726,19 +769,24 @@
         const img = new Image();
         img.onload = function () {
           const canvas = document.createElement("canvas");
-          const size = Math.min(img.width, img.height);
-          canvas.width = size;
-          canvas.height = size;
+          // Resize to 144x144 (StreamDeck button is 72px, 144 for retina).
+          // Without this, full-resolution images produce huge base64 strings
+          // that exceed the StreamDeck WebSocket message size limit.
+          const targetSize = 144;
+          canvas.width = targetSize;
+          canvas.height = targetSize;
 
           const ctx = canvas.getContext("2d");
+          const size = Math.min(img.width, img.height);
           const x = (img.width - size) / 2;
           const y = (img.height - size) / 2;
 
-          ctx.drawImage(img, x, y, size, size, 0, 0, size, size);
+          // Crop to center square and scale down to targetSize in one step
+          ctx.drawImage(img, x, y, size, size, 0, 0, targetSize, targetSize);
 
-          const croppedDataUrl = canvas.toDataURL("image/jpeg", 0.9);
+          const croppedDataUrl = canvas.toDataURL("image/png");
           console.log(
-            `Cropped image from ${img.width}x${img.height} to ${size}x${size}`,
+            `Cropped and resized image from ${img.width}x${img.height} to ${targetSize}x${targetSize}`,
           );
           callback(croppedDataUrl);
         };
@@ -759,25 +807,19 @@
         const configuredDevices = settings["devices"] || [];
         for (const device of configuredDevices) {
           if (typeof device === "object" && device.icon === imageName) {
-            delete device.icon; // Clear the icon selection
+            delete device.icon;
           }
         }
-
-        // Update settings
-        settings.customImages = customImages;
         settings.devices = configuredDevices;
         saveSettings();
 
-        // Notify plugin to delete the image
-        console.log("Sending deleteImage event to plugin for:", imageName);
+        // Notify plugin to delete the image from disk
         $SD.api.sendToPlugin(uuid, actionInfo, {
           event: "deleteImage",
           imageName: imageName,
         });
 
-        // Refresh the icon picker UI by re-populating it
         populateIconPicker();
-        console.log("Custom image deleted and UI refreshed");
       }
 
       // File upload and drag-drop
