@@ -201,7 +201,7 @@
     <div id="iconPickerModal" class="icon-picker-modal">
       <div class="icon-picker-content">
         <span class="modal-close" onclick="closeIconPicker()">&times;</span>
-        <h3>Select Icon for Device</h3>
+        <h3 id="iconPickerTitle">Select Icon</h3>
 
         <h4>Built-in Icons</h4>
         <div class="icon-grid" id="builtinIcons"></div>
@@ -572,6 +572,20 @@
 
       function openIconPicker(deviceIndex) {
         currentIconPickerDeviceIndex = deviceIndex;
+
+        // Update title with the device name
+        const configuredDevices = settings["devices"] || [];
+        const device = configuredDevices[deviceIndex];
+        const deviceId = typeof device === "object" ? device.id : device;
+        const isInput = document.getElementById("input").checked;
+        const devices = isInput ? inputDevices : outputDevices;
+        const deviceName =
+          devices && devices[deviceId]
+            ? devices[deviceId].displayName
+            : deviceId;
+        document.getElementById("iconPickerTitle").textContent =
+          `Select Icon — ${deviceName}`;
+
         populateIconPicker();
         document.getElementById("iconPickerModal").style.display = "block";
       }
