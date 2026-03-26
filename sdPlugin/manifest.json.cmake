@@ -2,48 +2,30 @@
   "Actions": [
     {
       "States": [
-        {"Image": "headphones"},
-        {"Image": "speakers"},
-        {"Image": "active"},
-        {"Image": "inactive"},
-        {"Image": "headphones"},
-        {"Image": "speakers"},
-        {"Image": "active"},
-        {"Image": "inactive"},
-        {"Image": "headphones"},
-        {"Image": "speakers"}
+        {"Image": "headphones"}
       ],
       "SupportedInMultiActions": false,
       "Icon": "headphones",
       "Name": "Toggle Audio Device",
       "Tooltip": "Switch between audio devices.",
-      "UUID": "com.fredemmott.audiooutputswitch.toggle"
+      "UUID": "com.suop.audioswitcher.toggle"
     },
     {
       "SupportedInMultiActions": true,
       "Icon": "active",
       "Name": "Set Audio Device",
       "Tooltip": "Set a specific audio device",
-      "UUID": "com.fredemmott.audiooutputswitch.set",
+      "UUID": "com.suop.audioswitcher.set",
       "States": [
-        {"Image": "active"},
-        {"Image": "inactive"},
-        {"Image": "headphones"},
-        {"Image": "speakers"},
-        {"Image": "active"},
-        {"Image": "inactive"},
-        {"Image": "headphones"},
-        {"Image": "speakers"},
-        {"Image": "active"},
-        {"Image": "inactive"}
+        {"Image": "active"}
       ]
     }
   ],
-  "Author": "Fred Emmott",
+  "Author": "suop",
   "CodePathMac": "sdaudioswitch",
   "CodePathWin": "sdaudioswitch.exe",
-  "Description": "Toggle or set the active audio devices.",
-  "Name": "Audio Switcher",
+  "Description": "Cycle between multiple audio devices. Fork of Fred Emmott's Audio Switcher.",
+  "Name": "Audio Switcher (suop)",
   "PropertyInspectorPath": "propertyinspector/index.html",
   "Icon": "headphones",
   "Category": "Audio Devices",

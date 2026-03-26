@@ -15,7 +15,7 @@ jobs:
         shell: pwsh
         run: |
           cmake ${{github.workspace}}/source `
-            "-DCMAKE_INSTALL_PREFIX=${{runner.temp}}/com.fredemmott.audiooutputswitch.sdPlugin"
+            "-DCMAKE_INSTALL_PREFIX=${{runner.temp}}/com.suop.audioswitcher.sdPlugin"
       - name: Install static files
         working-directory: build/sdPlugin
         run: make install
@@ -56,10 +56,10 @@ jobs:
         run: |
           install -m755 \
             sdaudioswitch \
-            com.fredemmott.audiooutputswitch.sdPlugin/sdaudioswitch
+            com.suop.audioswitcher.sdPlugin/sdaudioswitch
           install -m755 \
             artifacts/build-windows-x86_64-RelWithDebInfo/sdaudioswitch.exe \
-            com.fredemmott.audiooutputswitch.sdPlugin/sdaudioswitch.exe
+            com.suop.audioswitcher.sdPlugin/sdaudioswitch.exe
       - name: Checkout DistributionTool
         uses: actions/checkout@v4
         with:
@@ -67,10 +67,10 @@ jobs:
       - name: Build .streamDeckPlugin
         run: |
           ./DistributionTool -b \
-            -i ${{runner.temp}}/com.fredemmott.audiooutputswitch.sdPlugin \
+            -i ${{runner.temp}}/com.suop.audioswitcher.sdPlugin \
             -o .
       - name: Upload .streamDeckPlugin
         uses: actions/upload-artifact@v4
         with:
           name: package-sdplugin
-          path: com.fredemmott.audiooutputswitch.streamDeckPlugin
+          path: com.suop.audioswitcher.streamDeckPlugin

@@ -14,9 +14,9 @@ endif()
 set(VERSION_BUILD "${DEFAULT_VERSION_BUILD}" CACHE STRING "patch component of version number")
 
 project(
-  com.fredemmott.audiooutputswitch.sdPlugin
+  com.suop.audioswitcher.sdPlugin
   LANGUAGES CXX
-  VERSION 3.2.0.${VERSION_BUILD}
+  VERSION 1.0.0.${VERSION_BUILD}
 )
 
 set(CMAKE_CXX_STANDARD 20)

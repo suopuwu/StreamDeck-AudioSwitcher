@@ -54,28 +54,6 @@ void from_json(const nlohmann::json& j, ButtonSettings& bs) {
         bs.devices.push_back(device);
       }
     }
-  } else {
-    // Migrate from old primary/secondary format
-    if (j.contains("primary")) {
-      const auto& primary = j.at("primary");
-      AudioDeviceInfo device;
-      if (primary.is_string()) {
-        device.id = primary;
-      } else {
-        device = primary;
-      }
-      bs.devices.push_back(device);
-    }
-    if (j.contains("secondary")) {
-      const auto& secondary = j.at("secondary");
-      AudioDeviceInfo device;
-      if (secondary.is_string()) {
-        device.id = secondary;
-      } else {
-        device = secondary;
-      }
-      bs.devices.push_back(device);
-    }
   }
 
   if (j.contains("matchStrategy")) {
@@ -106,10 +84,23 @@ void to_json(nlohmann::json& j, const ButtonSettings& bs) {
     roleStr = "default";
   }
 
+  // Serialize devices with per-device icon fields so icon assignments
+  // survive round-trips through C++ SetSettings (AudioDeviceInfo::to_json
+  // doesn't write icon, so we add it here).
+  json devicesJson = json::array();
+  for (const auto& device : bs.devices) {
+    json deviceJson = device;// uses AudioDeviceInfo::to_json
+    const auto iconIt = bs.deviceIcons.find(device.id);
+    if (iconIt != bs.deviceIcons.end()) {
+      deviceJson["icon"] = iconIt->second;
+    }
+    devicesJson.push_back(deviceJson);
+  }
+
   j = {
     {"direction", bs.direction},
     {"role", roleStr},
-    {"devices", bs.devices},
+    {"devices", devicesJson},
     {"matchStrategy", bs.matchStrategy},
     {"deviceIcons", bs.deviceIcons},
   };

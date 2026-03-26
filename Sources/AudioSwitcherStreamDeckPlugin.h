@@ -14,14 +14,11 @@ LICENSE file.
 #include <StreamDeckSDK/ESDBasePlugin.h>
 
 #include <mutex>
-#include <set>
 
 #include "ButtonSettings.h"
 
 using json = nlohmann::json;
 using namespace FredEmmott::Audio;
-
-class CallBackTimer;
 
 class AudioSwitcherStreamDeckPlugin : public ESDBasePlugin {
  public:
@@ -75,15 +72,17 @@ class AudioSwitcherStreamDeckPlugin : public ESDBasePlugin {
   };
 
   std::recursive_mutex mVisibleContextsMutex;
-  std::set<std::string> mVisibleContexts;
-
   std::map<std::string, Button> mButtons;
   DefaultChangeCallbackHandle mCallbackHandle;
 
   // Global custom image store (shared across all buttons).
   // Keyed by short name (e.g. "img1") → base64 data URL.
   std::map<std::string, std::string> mCustomImages;
+  // Built-in icon images loaded from PNG files at startup.
+  // Keyed by icon name (e.g. "headphones") → base64 data URL.
+  std::map<std::string, std::string> mBuiltInIcons;
   std::string mCustomImagesPath;// path to the JSON file on disk
+  std::string mPluginDir;// directory containing the executable and icons
 
   void OnDefaultDeviceChanged(
     AudioDeviceDirection direction,
@@ -94,4 +93,5 @@ class AudioSwitcherStreamDeckPlugin : public ESDBasePlugin {
 
   void LoadCustomImages();
   void SaveCustomImages();
+  void LoadBuiltInIcons();
 };
