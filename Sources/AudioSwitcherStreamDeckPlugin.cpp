@@ -19,14 +19,13 @@ LICENSE file.
 #include <StreamDeckSDK/ESDConnectionManager.h>
 #include <StreamDeckSDK/ESDLogger.h>
 
-#include <functional>
 #include <mutex>
 
 #ifdef _MSC_VER
 #include <objbase.h>
 #endif
 
-#include <cctype>
+#include <array>
 #include <fstream>
 
 #include "audio_json.h"
@@ -96,9 +95,13 @@ AudioSwitcherStreamDeckPlugin::AudioSwitcherStreamDeckPlugin() {
   }
   LoadCustomImages();
 
-  mCallbackHandle = AddDefaultAudioDeviceChangeCallback(
-    std::bind_front(
-      &AudioSwitcherStreamDeckPlugin::OnDefaultDeviceChanged, this));
+  mCallbackHandle
+    = AddDefaultAudioDeviceChangeCallback([this](
+                                            AudioDeviceDirection dir,
+                                            AudioDeviceRole role,
+                                            const std::string& device) {
+        OnDefaultDeviceChanged(dir, role, device);
+      });
 }
 
 AudioSwitcherStreamDeckPlugin::~AudioSwitcherStreamDeckPlugin() {
@@ -198,11 +201,6 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
       mConnectionManager->ShowAlertForContext(inContext);
       return;
     }
-  }
-
-  if (deviceID.empty()) {
-    ESDDebug("Doing nothing, no device ID");
-    return;
   }
 
   ESDDebug(
@@ -470,18 +468,14 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
     return;
   }
 
-  // Built-in icon name → manifest state index (must match order in manifest
-  // States array).
-  auto builtInStateIndex = [](const std::string& icon) -> int {
-    if (icon == "headphones")
-      return 0;
-    if (icon == "speakers")
-      return 1;
-    if (icon == "active")
-      return 2;
-    if (icon == "inactive")
-      return 3;
-    return 0;
+  // Built-in icon name → manifest state index (must match States array order).
+  static constexpr std::array<std::string_view, 4> kBuiltInIcons
+    = {"headphones", "speakers", "active", "inactive"};
+  auto builtInStateIndex = [&](const std::string& icon) -> int {
+    const auto it = std::find(kBuiltInIcons.begin(), kBuiltInIcons.end(), icon);
+    return it != kBuiltInIcons.end()
+      ? static_cast<int>(it - kBuiltInIcons.begin())
+      : 0;
   };
 
   // Find which device is active and update its icon.
@@ -562,11 +556,7 @@ void AudioSwitcherStreamDeckPlugin::LoadCustomImages() {
   try {
     json j;
     file >> j;
-    if (j.is_object()) {
-      for (auto& [name, data] : j.items()) {
-        mCustomImages[name] = data.get<std::string>();
-      }
-    }
+    mCustomImages = j.get<std::map<std::string, std::string>>();
     ESDDebug("Loaded {} custom images from disk", mCustomImages.size());
   } catch (const std::exception& e) {
     ESDDebug("Failed to load custom images: {}", e.what());
