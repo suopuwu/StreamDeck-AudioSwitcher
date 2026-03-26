@@ -27,7 +27,34 @@ LICENSE file.
 #include <objbase.h>
 #endif
 
+#include <cctype>
+#include <fstream>
+#include <sstream>
+
 #include "audio_json.h"
+
+// URL decode helper function
+std::string URLDecode(const std::string& encoded) {
+  std::string decoded;
+  for (size_t i = 0; i < encoded.length(); ++i) {
+    if (encoded[i] == '%' && i + 2 < encoded.length()) {
+      std::string hexStr = encoded.substr(i + 1, 2);
+      char* end;
+      long value = std::strtol(hexStr.c_str(), &end, 16);
+      if (end == hexStr.c_str() + 2) {
+        decoded += static_cast<char>(value);
+        i += 2;
+        continue;
+      }
+    }
+    if (encoded[i] == '+') {
+      decoded += ' ';
+    } else {
+      decoded += encoded[i];
+    }
+  }
+  return decoded;
+}
 
 using namespace FredEmmott::Audio;
 using json = nlohmann::json;
@@ -261,6 +288,88 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
     }
     return;
   }
+
+  if (event == "readFile") {
+    // Handle file upload from property inspector
+    if (!inPayload.contains("fileName")) {
+      return;
+    }
+
+    const auto fileName = EPLJSONUtils::GetStringByName(inPayload, "fileName");
+    const auto decodedFileName = URLDecode(fileName);
+    ESDDebug("Reading file: {} (decoded: {})", fileName, decodedFileName);
+
+    // Read file and convert to base64
+    std::ifstream file(decodedFileName, std::ios::binary);
+    if (!file.is_open()) {
+      ESDDebug("Failed to open file: {}", decodedFileName);
+      return;
+    }
+
+    std::vector<uint8_t> fileData(
+      (std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+
+    // Simple base64 encoding
+    const char* base64_chars
+      = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string base64Data;
+
+    for (size_t i = 0; i < fileData.size(); i += 3) {
+      uint32_t b1 = fileData[i];
+      uint32_t b2 = (i + 1 < fileData.size()) ? fileData[i + 1] : 0;
+      uint32_t b3 = (i + 2 < fileData.size()) ? fileData[i + 2] : 0;
+
+      uint32_t bits = (b1 << 16) | (b2 << 8) | b3;
+
+      base64Data += base64_chars[(bits >> 18) & 0x3F];
+      base64Data += base64_chars[(bits >> 12) & 0x3F];
+      base64Data
+        += (i + 1 < fileData.size()) ? base64_chars[(bits >> 6) & 0x3F] : '=';
+      base64Data += (i + 2 < fileData.size()) ? base64_chars[bits & 0x3F] : '=';
+    }
+
+    mConnectionManager->SendToPropertyInspector(
+      inAction,
+      inContext,
+      json({
+        {"event", "fileData"},
+        {"fileName", fileName},
+        {"base64Data", base64Data},
+      }));
+    return;
+  }
+
+  if (event == "updateState") {
+    // Update the button state when icon selection changes
+    // The UI sends the new icon and device index directly to avoid timing
+    // issues
+    {
+      std::scoped_lock lock(mVisibleContextsMutex);
+      if (mButtons.contains(inContext)) {
+        if (inPayload.contains("icon") && inPayload.contains("deviceIndex")) {
+          const auto newIcon = EPLJSONUtils::GetStringByName(inPayload, "icon");
+          const auto deviceIndex = inPayload.at("deviceIndex").get<size_t>();
+          ESDDebug(
+            "updateState: device index {}, changing icon to: {}",
+            deviceIndex,
+            newIcon);
+
+          auto& settings = mButtons[inContext].settings;
+          if (deviceIndex < settings.devices.size()) {
+            const auto& device = settings.devices[deviceIndex];
+            // Update the deviceIcons map with the new icon
+            settings.deviceIcons[device.id] = newIcon;
+            ESDDebug(
+              "updateState: updated deviceIcons[{}] = {}", device.id, newIcon);
+          }
+        }
+      }
+    }
+    // Call UpdateState without holding the lock (it will acquire its own)
+    UpdateState(inContext);
+    return;
+  }
 }
 
 void AudioSwitcherStreamDeckPlugin::UpdateState(
@@ -290,8 +399,25 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
     if (deviceList[i].id == activeDevice) {
       // Get the user-selected icon for this device
       const auto icon = settings.GetDeviceIcon(deviceList[i].id, i);
+      ESDDebug(
+        "UpdateState: Device {} (index {}) icon: {}",
+        deviceList[i].id,
+        i,
+        icon);
 
-      // Map icon to state based on action type
+      // Check if this is a custom image
+      const auto customIt = settings.customImages.find(icon);
+      if (customIt != settings.customImages.end()) {
+        // Custom image - use SetImage directly
+        const auto& base64Data = customIt->second;
+        ESDDebug(
+          "Setting custom image: {} (size: {})", icon, base64Data.size());
+        mConnectionManager->SetImage(
+          base64Data, context, kESDSDKTarget_HardwareAndSoftware);
+        return;
+      }
+
+      // Not a custom image - map icon to manifest state based on action type
       int state = static_cast<int>(i);
       if (action == SET_ACTION_ID) {
         // For set action: active (0), inactive (1), headphones (2), speakers
@@ -307,11 +433,17 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
           "speakers",
           "active",
           "inactive"};
+        bool found = false;
         for (size_t j = 0; j < setIcons.size(); ++j) {
           if (setIcons[j] == icon) {
             state = static_cast<int>(j);
+            found = true;
             break;
           }
+        }
+        // If icon not found (custom image), default to active (state 0)
+        if (!found) {
+          state = 0;
         }
       } else {
         // For toggle action: headphones (0), speakers (1), active (2), inactive
@@ -327,11 +459,18 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
           "inactive",
           "headphones",
           "speakers"};
+        bool found = false;
         for (size_t j = 0; j < toggleIcons.size(); ++j) {
           if (toggleIcons[j] == icon) {
             state = static_cast<int>(j);
+            found = true;
             break;
           }
+        }
+        // If icon not found (custom image), default to active (state 2 for
+        // toggle)
+        if (!found) {
+          state = 2;
         }
       }
 

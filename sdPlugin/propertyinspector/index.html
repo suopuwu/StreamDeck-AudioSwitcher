@@ -8,6 +8,92 @@
       .platform-mac .windows-only {
         display: none;
       }
+
+      .icon-picker-modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+      }
+
+      .icon-picker-content {
+        background-color: #2d2d2d;
+        margin: 5% auto;
+        padding: 20px;
+        border: 1px solid #444;
+        width: 80%;
+        max-height: 80vh;
+        overflow-y: auto;
+        border-radius: 5px;
+      }
+
+      .icon-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+        gap: 10px;
+        margin: 15px 0;
+      }
+
+      .icon-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px;
+        background: #3a3a3a;
+        border: 1px solid #555;
+        border-radius: 3px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .icon-item:hover {
+        background: #4a4a4a;
+        border-color: #0078d4;
+      }
+
+      .icon-item img {
+        width: 40px;
+        height: 40px;
+        object-fit: contain;
+        margin-bottom: 5px;
+      }
+
+      .icon-item-name {
+        font-size: 11px;
+        text-align: center;
+        color: #aaa;
+        word-break: break-word;
+      }
+
+      .upload-zone {
+        border: 2px dashed #0078d4;
+        border-radius: 5px;
+        padding: 20px;
+        text-align: center;
+        margin: 10px 0;
+        background: #3a3a3a;
+        cursor: pointer;
+      }
+
+      .upload-zone:hover {
+        background: #4a4a4a;
+      }
+
+      .modal-close {
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+        color: #aaa;
+      }
+
+      .modal-close:hover {
+        color: #fff;
+      }
     </style>
   </head>
 
@@ -104,6 +190,30 @@
       </div>
     </div>
 
+    <!-- Icon Picker Modal -->
+    <div id="iconPickerModal" class="icon-picker-modal">
+      <div class="icon-picker-content">
+        <span class="modal-close" onclick="closeIconPicker()">&times;</span>
+        <h3>Select Icon for Device</h3>
+
+        <h4>Built-in Icons</h4>
+        <div class="icon-grid" id="builtinIcons"></div>
+
+        <h4>Custom Icons</h4>
+        <div class="upload-zone" id="dropZone">
+          <p>Drag & drop PNG/JPG files here or click to upload</p>
+          <input
+            type="file"
+            id="fileInput"
+            multiple
+            accept="image/png,image/jpeg"
+            style="display: none"
+          />
+        </div>
+        <div class="icon-grid" id="customIcons"></div>
+      </div>
+    </div>
+
     <script src="common.js"></script>
     <script>
       /** Step 1: Subscribe to the 'connected' event
@@ -123,7 +233,35 @@
 
       function receivedDataFromPlugin(jsonObj) {
         const payload = jsonObj["payload"];
-        if (payload["event"] !== "getDeviceList") {
+        const event = payload["event"];
+
+        // Handle file data from plugin
+        if (event === "fileData") {
+          console.log("Received fileData from plugin for:", payload.fileName);
+          if (payload.base64Data) {
+            // Generate short name for the image
+            customImageCounter++;
+            const shortName = `img${customImageCounter}`;
+            const dataUrl = "data:image/jpeg;base64," + payload.base64Data;
+            customImages[shortName] = dataUrl;
+
+            // Save custom images to settings for persistence
+            if (!settings.customImages) {
+              settings.customImages = {};
+            }
+            settings.customImages[shortName] = dataUrl;
+            console.log(
+              `Stored custom image as: ${shortName}, persisting to settings`,
+            );
+
+            populateIconPicker();
+            saveSettings();
+          }
+          return;
+        }
+
+        // Handle device list
+        if (event !== "getDeviceList") {
           return;
         }
 
@@ -255,36 +393,17 @@
           label.textContent = `${index + 1}. ${displayName}`;
           label.style.flex = "1";
 
-          const iconSelect = document.createElement("select");
-          iconSelect.style.minWidth = "80px";
-          iconOptions.forEach((icon) => {
-            const option = document.createElement("option");
-            option.value = icon;
-            option.textContent = icon.charAt(0).toUpperCase() + icon.slice(1);
-            if (icon === currentIcon) {
-              option.selected = true;
-            }
-            iconSelect.appendChild(option);
-          });
-          iconSelect.onchange = () => {
-            if (typeof configuredDevices[index] === "object") {
-              configuredDevices[index].icon = iconSelect.value;
-            } else {
-              configuredDevices[index] = {
-                id: configuredDevices[index],
-                icon: iconSelect.value,
-              };
-            }
-            settings.devices = configuredDevices;
-            saveSettings();
-          };
+          const iconBtn = document.createElement("button");
+          iconBtn.style.minWidth = "80px";
+          iconBtn.textContent = "Select Icon";
+          iconBtn.onclick = () => openIconPicker(index);
 
           const removeBtn = document.createElement("button");
           removeBtn.textContent = "Remove";
           removeBtn.onclick = () => removeDevice(index);
 
           itemDiv.appendChild(label);
-          itemDiv.appendChild(iconSelect);
+          itemDiv.appendChild(iconBtn);
           itemDiv.appendChild(removeBtn);
           deviceListDiv.appendChild(itemDiv);
         });
@@ -357,6 +476,28 @@
           .getElementById("mainWrapper")
           .classList.add(`platform-${platform}`);
 
+        // Restore custom images from settings
+        if (settings.customImages) {
+          customImages = settings.customImages;
+          // Update counter based on restored images (extract numbers from img1, img2, etc.)
+          const imageNames = Object.keys(customImages);
+          imageNames.forEach((name) => {
+            const match = name.match(/img(\d+)/);
+            if (match) {
+              customImageCounter = Math.max(
+                customImageCounter,
+                parseInt(match[1]),
+              );
+            }
+          });
+          console.log(
+            "Restored custom images from settings:",
+            Object.keys(customImages),
+            "counter now at:",
+            customImageCounter,
+          );
+        }
+
         // request settings and list of devices
         $SD.api.sendToPlugin(uuid, actionInfo, { event: "getDeviceList" });
       }
@@ -377,6 +518,235 @@
         console.log(settings);
         $SD.api.setSettings(uuid, settings);
       }
+
+      // Icon picker functions
+      var currentIconPickerDeviceIndex = -1;
+      var customImages = {};
+      var customImageCounter = 0; // Counter to generate short names
+
+      function openIconPicker(deviceIndex) {
+        currentIconPickerDeviceIndex = deviceIndex;
+        populateIconPicker();
+        document.getElementById("iconPickerModal").style.display = "block";
+      }
+
+      function closeIconPicker() {
+        document.getElementById("iconPickerModal").style.display = "none";
+      }
+
+      function populateIconPicker() {
+        const builtinIcons = ["headphones", "speakers", "active", "inactive"];
+        const builtinContainer = document.getElementById("builtinIcons");
+        builtinContainer.innerHTML = "";
+
+        builtinIcons.forEach((iconName) => {
+          const item = document.createElement("div");
+          item.className = "icon-item";
+          item.style.cursor = "pointer";
+          item.innerHTML = `<span class="icon-item-name">${iconName}</span>`;
+          item.onclick = (e) => {
+            e.stopPropagation();
+            console.log("Clicked builtin icon:", iconName);
+            selectIcon(iconName);
+          };
+          builtinContainer.appendChild(item);
+        });
+
+        // Populate custom icons
+        const customContainer = document.getElementById("customIcons");
+        customContainer.innerHTML = "";
+        console.log(
+          "Populating custom icons, found:",
+          Object.keys(customImages).length,
+          "items",
+        );
+
+        for (const [name, data] of Object.entries(customImages)) {
+          const item = document.createElement("div");
+          item.className = "icon-item";
+          item.style.cursor = "pointer";
+          item.style.backgroundImage = `url('${data}')`;
+          item.style.backgroundSize = "cover";
+          item.innerHTML = `<span class="icon-item-name">${name}</span>`;
+          item.onclick = (e) => {
+            e.stopPropagation();
+            console.log("Clicked custom image:", name);
+            selectIcon(name);
+          };
+          customContainer.appendChild(item);
+        }
+      }
+
+      function selectIcon(iconName) {
+        console.log("selectIcon called with:", iconName);
+        if (currentIconPickerDeviceIndex >= 0) {
+          const configuredDevices = settings["devices"] || [];
+          if (currentIconPickerDeviceIndex < configuredDevices.length) {
+            const device = configuredDevices[currentIconPickerDeviceIndex];
+            console.log(
+              "Setting icon for device index",
+              currentIconPickerDeviceIndex,
+              "to:",
+              iconName,
+            );
+            if (typeof device === "object") {
+              device.icon = iconName;
+            } else {
+              configuredDevices[currentIconPickerDeviceIndex] = {
+                id: device,
+                icon: iconName,
+              };
+            }
+            settings.devices = configuredDevices;
+            const isInput = document.getElementById("input").checked;
+            const devices = isInput ? inputDevices : outputDevices;
+            console.log("Updated devices, refreshing list");
+            updateConfiguredDevicesList(devices);
+            saveSettings();
+
+            // Trigger plugin to update the button state with the new icon
+            // Include the icon info directly so plugin doesn't rely on stale settings
+            console.log(
+              "Requesting plugin to update state for device index:",
+              currentIconPickerDeviceIndex,
+              "with icon:",
+              iconName,
+            );
+            $SD.api.sendToPlugin(uuid, actionInfo, {
+              event: "updateState",
+              deviceIndex: currentIconPickerDeviceIndex,
+              icon: iconName,
+            });
+            console.log("Settings saved");
+          } else {
+            console.error("Device index out of range");
+          }
+        } else {
+          console.error("No device selected in icon picker");
+        }
+        closeIconPicker();
+      }
+
+      // File upload and drag-drop
+      const dropZone = document.getElementById("dropZone");
+      const fileInput = document.getElementById("fileInput");
+
+      console.log(
+        "Setting up file upload handlers. dropZone:",
+        dropZone !== null,
+        "fileInput:",
+        fileInput !== null,
+      );
+
+      if (dropZone) {
+        dropZone.addEventListener("click", () => {
+          console.log("dropZone clicked, triggering fileInput");
+          fileInput.click();
+        });
+        dropZone.addEventListener("dragover", (e) => {
+          console.log("dragover event");
+          e.preventDefault();
+          dropZone.style.background = "#4a4a4a";
+        });
+        dropZone.addEventListener("dragleave", () => {
+          console.log("dragleave event");
+          dropZone.style.background = "#3a3a3a";
+        });
+        dropZone.addEventListener("drop", (e) => {
+          console.log("drop event, files:", e.dataTransfer.files.length);
+          e.preventDefault();
+          dropZone.style.background = "#3a3a3a";
+          handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener("change", (e) => {
+          console.log("fileInput change event, files:", e.target.files.length);
+          handleFiles(e.target.files);
+          // Reset the input so the same file can be selected again
+          e.target.value = "";
+        });
+      } else {
+        console.error("dropZone element not found!");
+      }
+
+      function handleFiles(files) {
+        console.log("handleFiles called with", files.length, "files");
+        // Since FileReader doesn't work in StreamDeck's WebView due to security restrictions,
+        // we'll send the file paths to the plugin to read them
+        const fileArray = Array.from(files);
+
+        fileArray.forEach((file, index) => {
+          console.log(
+            `[${index}] File object: name=${file.name}, type=${file.type}, size=${file.size}`,
+          );
+
+          if (!file.type.startsWith("image/")) {
+            console.warn(`[${index}] Skipping non-image file: ${file.type}`);
+            return;
+          }
+
+          // File size 0 indicates the WebView can't access the file directly
+          // Request the plugin to read the file instead
+          if (file.size === 0) {
+            console.log(
+              `[${index}] File size is 0, requesting plugin to read file`,
+            );
+            $SD.api.sendToPlugin(uuid, actionInfo, {
+              event: "readFile",
+              fileName: file.name,
+              fileType: file.type,
+            });
+          } else {
+            // If somehow size > 0, try FileReader
+            const reader = new FileReader();
+            const fileName = file.name;
+
+            reader.onerror = function (e) {
+              console.error(
+                `[${index}] FileReader error for ${fileName}:`,
+                reader.error?.name,
+                reader.error?.message,
+              );
+            };
+
+            reader.onload = function (e) {
+              try {
+                const result = e.target?.result;
+                if (!result) {
+                  console.error(
+                    `[${index}] FileReader result is empty for ${fileName}`,
+                  );
+                  return;
+                }
+
+                const baseName = fileName.replace(/\.[^/.]+$/, "");
+                console.log(
+                  `[${index}] File loaded successfully (${result.length} bytes), storing as: ${baseName}`,
+                );
+                customImages[baseName] = result;
+                populateIconPicker();
+              } catch (err) {
+                console.error(
+                  `[${index}] Error in FileReader.onload:`,
+                  err?.message || err,
+                );
+              }
+            };
+
+            console.log(
+              `[${index}] Starting FileReader.readAsDataURL for ${fileName}`,
+            );
+            reader.readAsDataURL(file);
+          }
+        });
+      }
+
+      window.onclick = function (event) {
+        const modal = document.getElementById("iconPickerModal");
+        if (event.target == modal) {
+          modal.style.display = "none";
+        }
+      };
     </script>
   </body>
 </html>

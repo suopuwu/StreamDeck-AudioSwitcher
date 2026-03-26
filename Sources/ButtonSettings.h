@@ -24,6 +24,7 @@ struct ButtonSettings {
   AudioDeviceRole secondaryRole = AudioDeviceRole::DEFAULT;
   std::vector<AudioDeviceInfo> devices;
   std::map<std::string, std::string> deviceIcons;// device ID -> icon name
+  std::map<std::string, std::string> customImages;// icon name -> base64 data
   DeviceMatchStrategy matchStrategy = DeviceMatchStrategy::ID;
   bool setBothRoles = false;
 

@@ -81,6 +81,15 @@ void from_json(const nlohmann::json& j, ButtonSettings& bs) {
   if (j.contains("matchStrategy")) {
     bs.matchStrategy = j.at("matchStrategy");
   }
+
+  if (j.contains("customImages")) {
+    const auto& customImagesJson = j.at("customImages");
+    if (customImagesJson.is_object()) {
+      for (auto& [name, dataUrl] : customImagesJson.items()) {
+        bs.customImages[name] = dataUrl.get<std::string>();
+      }
+    }
+  }
 }
 
 void to_json(nlohmann::json& j, const ButtonSettings& bs) {
