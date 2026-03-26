@@ -124,7 +124,7 @@ void AudioSwitcherStreamDeckPlugin::KeyDownForAction(
   const std::string& inContext,
   const json& inPayload,
   const std::string& inDeviceID) {
-  const auto state = EPLJSONUtils::GetIntByName(inPayload, "state");
+  // No action on key down
 }
 
 void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
@@ -148,8 +148,6 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
     ESDDebug("No devices configured");
     return;
   }
-
-  const auto state = EPLJSONUtils::GetIntByName(inPayload, "state");
 
   // Find the next device in the list
   auto currentDevice
@@ -376,10 +374,11 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
     if (!inPayload.contains("imageName")) {
       return;
     }
-    
-    const auto imageName = EPLJSONUtils::GetStringByName(inPayload, "imageName");
+
+    const auto imageName
+      = EPLJSONUtils::GetStringByName(inPayload, "imageName");
     ESDDebug("deleteImage event: removing custom image: {}", imageName);
-    
+
     {
       std::scoped_lock lock(mVisibleContextsMutex);
       if (mButtons.contains(inContext)) {
@@ -389,7 +388,7 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
         ESDDebug("Deleted custom image: {}", imageName);
       }
     }
-    
+
     // Also notify the property inspector that deletion is complete
     mConnectionManager->SendToPropertyInspector(
       inAction,
@@ -447,63 +446,10 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
         return;
       }
 
-      // Not a custom image - map icon to manifest state based on action type
-      int state = static_cast<int>(i);
-      if (action == SET_ACTION_ID) {
-        // For set action: active (0), inactive (1), headphones (2), speakers
-        // (3), ...
-        const std::vector<std::string> setIcons = {
-          "active",
-          "inactive",
-          "headphones",
-          "speakers",
-          "active",
-          "inactive",
-          "headphones",
-          "speakers",
-          "active",
-          "inactive"};
-        bool found = false;
-        for (size_t j = 0; j < setIcons.size(); ++j) {
-          if (setIcons[j] == icon) {
-            state = static_cast<int>(j);
-            found = true;
-            break;
-          }
-        }
-        // If icon not found (custom image), default to active (state 0)
-        if (!found) {
-          state = 0;
-        }
-      } else {
-        // For toggle action: headphones (0), speakers (1), active (2), inactive
-        // (3), ...
-        const std::vector<std::string> toggleIcons = {
-          "headphones",
-          "speakers",
-          "active",
-          "inactive",
-          "headphones",
-          "speakers",
-          "active",
-          "inactive",
-          "headphones",
-          "speakers"};
-        bool found = false;
-        for (size_t j = 0; j < toggleIcons.size(); ++j) {
-          if (toggleIcons[j] == icon) {
-            state = static_cast<int>(j);
-            found = true;
-            break;
-          }
-        }
-        // If icon not found (custom image), default to active (state 2 for
-        // toggle)
-        if (!found) {
-          state = 2;
-        }
-      }
-
+      // For built-in icons, map device index directly to state (0-9)
+      // This ensures consistent cycling without duplicates
+      int state = static_cast<int>(i % 10);
+      ESDDebug("Setting state to {} for device at index {}", state, i);
       mConnectionManager->SetState(state, context);
       return;
     }

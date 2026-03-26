@@ -171,9 +171,9 @@
       </div>
       <div type="select" class="sdpi-item">
         <div class="sdpi-item-label">Devices</div>
-        <div class="sdpi-item-value">
-          <select class="sdpi-item-value select" id="deviceSelect"></select>
+        <div class="sdpi-item-value" style="display: flex">
           <button id="addDeviceBtn" onclick="addDevice()">Add</button>
+          <select class="sdpi-item-value select" id="deviceSelect"></select>
         </div>
       </div>
       <div id="deviceList" style="margin-left: 20px"></div>
@@ -201,12 +201,12 @@
 
         <h4>Custom Icons</h4>
         <div class="upload-zone" id="dropZone">
-          <p>Drag & drop PNG/JPG files here or click to upload</p>
+          <p>Drag & drop PNG/JPG/WebP files here or click to upload</p>
           <input
             type="file"
             id="fileInput"
             multiple
-            accept="image/png,image/jpeg"
+            accept="image/png,image/jpeg,image/webp"
             style="display: none"
           />
         </div>
@@ -243,19 +243,23 @@
             customImageCounter++;
             const shortName = `img${customImageCounter}`;
             const dataUrl = "data:image/jpeg;base64," + payload.base64Data;
-            customImages[shortName] = dataUrl;
 
-            // Save custom images to settings for persistence
-            if (!settings.customImages) {
-              settings.customImages = {};
-            }
-            settings.customImages[shortName] = dataUrl;
-            console.log(
-              `Stored custom image as: ${shortName}, persisting to settings`,
-            );
+            // Crop the image to a square before storing
+            cropImageToSquare(dataUrl, (croppedDataUrl) => {
+              customImages[shortName] = croppedDataUrl;
 
-            populateIconPicker();
-            saveSettings();
+              // Save custom images to settings for persistence
+              if (!settings.customImages) {
+                settings.customImages = {};
+              }
+              settings.customImages[shortName] = croppedDataUrl;
+              console.log(
+                `Stored custom image as: ${shortName}, persisting to settings`,
+              );
+
+              populateIconPicker();
+              saveSettings();
+            });
           }
           return;
         }
@@ -336,11 +340,16 @@
             (d) => (typeof d == "object" ? d.id : d) === deviceId,
           );
 
+          // Skip devices that are already configured or not connected
           if (
             device.state !== "connected" &&
-            device.state !== "device_present_no_connection" &&
-            !isConfigured
+            device.state !== "device_present_no_connection"
           ) {
+            return;
+          }
+
+          // Skip devices that are already configured
+          if (isConfigured) {
             return;
           }
 
@@ -362,6 +371,7 @@
 
         // Update the list of configured devices
         updateConfiguredDevicesList(devices);
+        validateAddButton();
       }
 
       function updateConfiguredDevicesList(devices) {
@@ -409,6 +419,13 @@
         });
       }
 
+      function validateAddButton() {
+        const deviceSelector = document.getElementById("deviceSelect");
+        const addBtn = document.getElementById("addDeviceBtn");
+        // Disable button if there are no devices to add (dropdown is empty)
+        addBtn.disabled = deviceSelector.children.length === 0;
+      }
+
       function addDevice() {
         const deviceSelector = document.getElementById("deviceSelect");
         const deviceId = deviceSelector.value;
@@ -422,14 +439,15 @@
         const device = devices[deviceId];
 
         const configuredDevices = settings["devices"] || [];
-        if (
-          !configuredDevices.some(
-            (d) => (typeof d == "object" ? d.id : d) === deviceId,
-          )
-        ) {
+        const isDuplicate = configuredDevices.some(
+          (d) => (typeof d == "object" ? d.id : d) === deviceId,
+        );
+
+        if (!isDuplicate) {
           configuredDevices.push(device);
           settings.devices = configuredDevices;
           updateConfiguredDevicesList(devices);
+          validateAddButton();
           saveSettings();
           deviceSelector.value = "";
           $SD.api.sendToPlugin(uuid, actionInfo, {
@@ -438,6 +456,10 @@
           });
           // Request device list to refresh UI
           $SD.api.sendToPlugin(uuid, actionInfo, { event: "getDeviceList" });
+        } else {
+          alert(
+            "This device is already configured. Please select a different device.",
+          );
         }
       }
 
@@ -448,6 +470,7 @@
         const isInput = document.getElementById("input").checked;
         const devices = isInput ? inputDevices : outputDevices;
         updateConfiguredDevicesList(devices);
+        validateAddButton();
         saveSettings();
         $SD.api.sendToPlugin(uuid, actionInfo, {
           event: "removeDevice",
@@ -696,6 +719,33 @@
           console.error("No device selected in icon picker");
         }
         closeIconPicker();
+      }
+
+      function cropImageToSquare(dataUrl, callback) {
+        const img = new Image();
+        img.onload = function () {
+          const canvas = document.createElement("canvas");
+          const size = Math.min(img.width, img.height);
+          canvas.width = size;
+          canvas.height = size;
+
+          const ctx = canvas.getContext("2d");
+          const x = (img.width - size) / 2;
+          const y = (img.height - size) / 2;
+
+          ctx.drawImage(img, x, y, size, size, 0, 0, size, size);
+
+          const croppedDataUrl = canvas.toDataURL("image/jpeg", 0.9);
+          console.log(
+            `Cropped image from ${img.width}x${img.height} to ${size}x${size}`,
+          );
+          callback(croppedDataUrl);
+        };
+        img.onerror = function () {
+          console.error("Failed to load image for cropping");
+          callback(dataUrl); // Return original if cropping fails
+        };
+        img.src = dataUrl;
       }
 
       function deleteImage(imageName) {
