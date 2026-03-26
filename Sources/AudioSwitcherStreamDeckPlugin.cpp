@@ -31,7 +31,9 @@ LICENSE file.
 
 #include "audio_json.h"
 
-// URL decode helper function
+namespace {
+
+// URL decode a percent-encoded string (used for file paths from the WebView).
 std::string URLDecode(const std::string& encoded) {
   std::string decoded;
   for (size_t i = 0; i < encoded.length(); ++i) {
@@ -54,11 +56,6 @@ std::string URLDecode(const std::string& encoded) {
   return decoded;
 }
 
-using namespace FredEmmott::Audio;
-using json = nlohmann::json;
-
-namespace {
-
 bool FillAudioDeviceInfo(AudioDeviceInfo& di) {
   if (di.id.empty()) {
     return false;
@@ -77,6 +74,9 @@ bool FillAudioDeviceInfo(AudioDeviceInfo& di) {
 
 }// namespace
 
+using namespace FredEmmott::Audio;
+using json = nlohmann::json;
+
 AudioSwitcherStreamDeckPlugin::AudioSwitcherStreamDeckPlugin() {
 #ifdef _MSC_VER
   CoInitializeEx(
@@ -92,7 +92,6 @@ AudioSwitcherStreamDeckPlugin::AudioSwitcherStreamDeckPlugin() {
     if (pos != std::string::npos) {
       dir = dir.substr(0, pos);
     }
-    mPluginDir = dir;
     mCustomImagesPath = dir + "\\custom_images.json";
   }
   LoadCustomImages();
@@ -227,7 +226,6 @@ void AudioSwitcherStreamDeckPlugin::WillAppearForAction(
   const std::string& inDeviceID) {
   std::scoped_lock lock(mVisibleContextsMutex);
   auto& button = mButtons[inContext];
-  button = {inAction, inContext};
 
   if (!inPayload.contains("settings")) {
     return;
@@ -456,7 +454,6 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
     return;
   }
   const auto button = mButtons[context];
-  const auto action = button.action;
   const auto settings = button.settings;
   auto activeDevice = optionalDefaultDevice.empty()
     ? GetDefaultAudioDeviceID(settings.direction, settings.role)

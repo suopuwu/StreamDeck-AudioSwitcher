@@ -3,7 +3,7 @@ configure_file(
   manifest.json
   NEWLINE_STYLE UNIX
 )
-file(GLOB STATIC_FILES *.png)
+file(GLOB STATIC_FILES *.png *.json)
 install(
   FILES
   ${STATIC_FILES}

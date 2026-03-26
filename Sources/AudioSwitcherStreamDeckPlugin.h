@@ -66,8 +66,6 @@ class AudioSwitcherStreamDeckPlugin : public ESDBasePlugin {
 
  private:
   struct Button {
-    std::string action;
-    std::string context;
     ButtonSettings settings;
   };
 
@@ -79,7 +77,6 @@ class AudioSwitcherStreamDeckPlugin : public ESDBasePlugin {
   // Keyed by short name (e.g. "img1") → base64 data URL.
   std::map<std::string, std::string> mCustomImages;
   std::string mCustomImagesPath;// path to the JSON file on disk
-  std::string mPluginDir;// directory containing the executable
 
   void OnDefaultDeviceChanged(
     AudioDeviceDirection direction,

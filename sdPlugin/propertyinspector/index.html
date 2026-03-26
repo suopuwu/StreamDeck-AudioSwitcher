@@ -101,6 +101,54 @@
       .modal-close:hover {
         color: #fff;
       }
+
+      .name-image-modal {
+        display: none;
+        position: fixed;
+        z-index: 1100;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+      }
+
+      .name-image-content {
+        background-color: #2d2d2d;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #444;
+        width: 60%;
+        border-radius: 5px;
+      }
+
+      .name-image-content h4 {
+        margin: 0 0 12px;
+      }
+
+      .name-image-preview {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+        display: block;
+        margin: 0 0 12px;
+        background: #1a1a1a;
+        border-radius: 3px;
+      }
+
+      .name-image-error {
+        color: #e05555;
+        font-size: 12px;
+        min-height: 16px;
+        margin: 4px 0 8px;
+      }
+
+      .name-image-buttons {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 12px;
+      }
     </style>
   </head>
 
@@ -221,6 +269,29 @@
       </div>
     </div>
 
+    <!-- Image Name Modal -->
+    <div id="nameImageModal" class="name-image-modal">
+      <div class="name-image-content">
+        <h4>Name this image</h4>
+        <img id="nameImagePreview" class="name-image-preview" src="" alt="" />
+        <input
+          type="text"
+          id="imageNameInput"
+          style="width: 100%; box-sizing: border-box"
+          placeholder="Image name"
+          onkeydown="
+            if (event.key === 'Enter') confirmImageName();
+            if (event.key === 'Escape') cancelImageName();
+          "
+        />
+        <div class="name-image-error" id="imageNameError"></div>
+        <div class="name-image-buttons">
+          <button onclick="cancelImageName()">Cancel</button>
+          <button onclick="confirmImageName()">Save</button>
+        </div>
+      </div>
+    </div>
+
     <script src="common.js"></script>
     <script>
       /** Step 1: Subscribe to the 'connected' event
@@ -246,28 +317,11 @@
         if (event === "fileData") {
           console.log("Received fileData from plugin for:", payload.fileName);
           if (payload.base64Data) {
-            // Generate short name for the image
-            customImageCounter++;
-            const shortName = `img${customImageCounter}`;
             const dataUrl = "data:image/jpeg;base64," + payload.base64Data;
 
-            // Crop the image to a square before storing
+            // Crop the image to a square, then ask the user for a name.
             cropImageToSquare(dataUrl, (croppedDataUrl) => {
-              customImages[shortName] = croppedDataUrl;
-              console.log(
-                `Stored custom image as: ${shortName}, sending to plugin`,
-              );
-
-              // Send the image to C++ for persistent storage on disk.
-              // We do NOT store it in settings — that would bloat the
-              // WebSocket messages and cause disconnects.
-              $SD.api.sendToPlugin(uuid, actionInfo, {
-                event: "storeCustomImage",
-                name: shortName,
-                data: croppedDataUrl,
-              });
-
-              populateIconPicker();
+              promptImageName(`img${customImageCounter + 1}`, croppedDataUrl);
             });
           }
           return;
@@ -568,7 +622,8 @@
       // Icon picker functions
       var currentIconPickerDeviceIndex = -1;
       var customImages = {};
-      var customImageCounter = 0; // Counter to generate short names
+      var customImageCounter = 0; // Counter to generate short default names
+      var pendingImageData = null; // Holds cropped data URL while user types a name
 
       function openIconPicker(deviceIndex) {
         currentIconPickerDeviceIndex = deviceIndex;
@@ -592,6 +647,58 @@
 
       function closeIconPicker() {
         document.getElementById("iconPickerModal").style.display = "none";
+      }
+
+      function promptImageName(defaultName, dataUrl) {
+        pendingImageData = { dataUrl };
+        document.getElementById("nameImagePreview").src = dataUrl;
+        const input = document.getElementById("imageNameInput");
+        input.value = defaultName;
+        document.getElementById("imageNameError").textContent = "";
+        document.getElementById("nameImageModal").style.display = "block";
+        // Select all so the user can immediately type a replacement
+        input.focus();
+        input.select();
+      }
+
+      function confirmImageName() {
+        const name = document.getElementById("imageNameInput").value.trim();
+        const errorEl = document.getElementById("imageNameError");
+
+        if (!name) {
+          errorEl.textContent = "Name cannot be empty.";
+          return;
+        }
+        if (Object.prototype.hasOwnProperty.call(customImages, name)) {
+          errorEl.textContent = "An image with this name already exists.";
+          return;
+        }
+
+        const data = pendingImageData.dataUrl;
+        pendingImageData = null;
+        document.getElementById("nameImageModal").style.display = "none";
+
+        // Advance the auto-name counter if the chosen name matches the pattern
+        const autoMatch = name.match(/^img(\d+)$/);
+        if (autoMatch) {
+          customImageCounter = Math.max(
+            customImageCounter,
+            parseInt(autoMatch[1]),
+          );
+        }
+
+        customImages[name] = data;
+        $SD.api.sendToPlugin(uuid, actionInfo, {
+          event: "storeCustomImage",
+          name: name,
+          data: data,
+        });
+        populateIconPicker();
+      }
+
+      function cancelImageName() {
+        pendingImageData = null;
+        document.getElementById("nameImageModal").style.display = "none";
       }
 
       function populateIconPicker() {
@@ -925,13 +1032,13 @@
                   );
                   return;
                 }
-
                 const baseName = fileName.replace(/\.[^/.]+$/, "");
                 console.log(
-                  `[${index}] File loaded successfully (${result.length} bytes), storing as: ${baseName}`,
+                  `[${index}] File loaded successfully (${result.length} bytes)`,
                 );
-                customImages[baseName] = result;
-                populateIconPicker();
+                cropImageToSquare(result, (croppedDataUrl) => {
+                  promptImageName(baseName, croppedDataUrl);
+                });
               } catch (err) {
                 console.error(
                   `[${index}] Error in FileReader.onload:`,
