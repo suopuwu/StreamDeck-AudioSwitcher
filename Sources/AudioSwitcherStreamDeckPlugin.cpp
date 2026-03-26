@@ -149,13 +149,7 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
     return;
   }
   auto& settings = mButtons[inContext].settings;
-  // Preserve in-memory deviceIcons before overwriting,
-  // as they may not yet be persisted back from the most recent SetSettings
-  const auto savedDeviceIcons = settings.deviceIcons;
   settings = inPayload.at("settings");
-  if (settings.deviceIcons.empty() && !savedDeviceIcons.empty()) {
-    settings.deviceIcons = savedDeviceIcons;
-  }
   FillButtonDeviceInfo(inContext);
 
   // Get list of configured devices
@@ -563,11 +557,7 @@ void AudioSwitcherStreamDeckPlugin::DidReceiveSettings(
     return;
   }
   auto& settings = mButtons[inContext].settings;
-  const auto savedDeviceIcons = settings.deviceIcons;
   settings = inPayload.at("settings");
-  if (settings.deviceIcons.empty() && !savedDeviceIcons.empty()) {
-    settings.deviceIcons = savedDeviceIcons;
-  }
   UpdateState(inContext);
   FillButtonDeviceInfo(inContext);
 }

@@ -557,12 +557,10 @@
 
         settings.matchStrategy = document.getElementById("matchStrategy").value;
 
-        // Strip customImages and deviceIcons before sending — customImages
-        // contains large base64 data that causes WebSocket disconnects,
-        // and deviceIcons is managed by C++ from per-device icon fields.
+        // Strip customImages before sending — it contains large base64
+        // data that causes WebSocket disconnects.
         const settingsToSave = Object.assign({}, settings);
         delete settingsToSave.customImages;
-        delete settingsToSave.deviceIcons;
         console.log(settingsToSave);
         $SD.api.setSettings(uuid, settingsToSave);
       }

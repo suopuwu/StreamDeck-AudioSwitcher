@@ -59,19 +59,6 @@ void from_json(const nlohmann::json& j, ButtonSettings& bs) {
   if (j.contains("matchStrategy")) {
     bs.matchStrategy = j.at("matchStrategy");
   }
-
-  if (j.contains("deviceIcons")) {
-    const auto& deviceIconsJson = j.at("deviceIcons");
-    if (deviceIconsJson.is_object()) {
-      for (auto& [deviceId, iconName] : deviceIconsJson.items()) {
-        // Only use the top-level map as a fallback — per-device icon
-        // fields (read above) take priority.
-        if (!bs.deviceIcons.contains(deviceId)) {
-          bs.deviceIcons[deviceId] = iconName.get<std::string>();
-        }
-      }
-    }
-  }
 }
 
 void to_json(nlohmann::json& j, const ButtonSettings& bs) {
@@ -102,7 +89,6 @@ void to_json(nlohmann::json& j, const ButtonSettings& bs) {
     {"role", roleStr},
     {"devices", devicesJson},
     {"matchStrategy", bs.matchStrategy},
-    {"deviceIcons", bs.deviceIcons},
   };
 }
 
