@@ -96,7 +96,6 @@ AudioSwitcherStreamDeckPlugin::AudioSwitcherStreamDeckPlugin() {
     mCustomImagesPath = dir + "\\custom_images.json";
   }
   LoadCustomImages();
-  LoadBuiltInIcons();
 
   mCallbackHandle = AddDefaultAudioDeviceChangeCallback(
     std::bind_front(
@@ -212,12 +211,6 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
     nextIndex,
     deviceID);
 
-  // Update the button visual BEFORE changing the audio device.
-  // This prevents the "flash" of the default icon — otherwise the
-  // visual only updates when the async OnDefaultDeviceChanged callback
-  // fires, which races with DidReceiveSettings overwriting state.
-  // Use the stored device ID (not the volatile one) so UpdateState
-  // can match it against deviceList entries.
   UpdateState(inContext, deviceList[nextIndex].id);
 
   SetDefaultAudioDeviceID(settings.direction, settings.role, deviceID);
@@ -480,16 +473,27 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
     return;
   }
 
-  // Find which device is active and set its icon via SetImage.
-  // We always use SetImage (never SetState) so that the StreamDeck's
-  // internal state auto-cycling on keyUp cannot cause icon flashes.
+  // Built-in icon name → manifest state index (must match order in manifest
+  // States array).
+  auto builtInStateIndex = [](const std::string& icon) -> int {
+    if (icon == "headphones")
+      return 0;
+    if (icon == "speakers")
+      return 1;
+    if (icon == "active")
+      return 2;
+    if (icon == "inactive")
+      return 3;
+    return 0;
+  };
+
+  // Find which device is active and update its icon.
   // Match against both stored ID and volatile ID to handle fuzzy matching.
   for (size_t i = 0; i < deviceList.size(); ++i) {
     const bool idMatch = (deviceList[i].id == activeDevice);
     const bool volatileMatch
       = !idMatch && (settings.GetVolatileDeviceID(i) == activeDevice);
     if (idMatch || volatileMatch) {
-      // Get the user-selected icon for this device
       const auto icon = settings.GetDeviceIcon(deviceList[i].id, i);
       ESDDebug(
         "UpdateState: Device {} (index {}) icon: {} (volatile={})",
@@ -498,30 +502,17 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
         icon,
         volatileMatch);
 
-      // Check custom images first, then built-in icons
+      // Custom images use SetImage; built-in icons use SetState.
       const auto customIt = mCustomImages.find(icon);
       if (customIt != mCustomImages.end()) {
         ESDDebug(
           "Setting custom image: {} (size: {})", icon, customIt->second.size());
         mConnectionManager->SetImage(
           customIt->second, context, kESDSDKTarget_HardwareAndSoftware);
-        return;
-      }
-
-      const auto builtInIt = mBuiltInIcons.find(icon);
-      if (builtInIt != mBuiltInIcons.end()) {
-        ESDDebug("Setting built-in icon image: {}", icon);
-        mConnectionManager->SetImage(
-          builtInIt->second, context, kESDSDKTarget_HardwareAndSoftware);
-        return;
-      }
-
-      // Fallback: use headphones icon if available
-      const auto fallback = mBuiltInIcons.find("headphones");
-      if (fallback != mBuiltInIcons.end()) {
-        ESDDebug("Falling back to headphones icon for: {}", icon);
-        mConnectionManager->SetImage(
-          fallback->second, context, kESDSDKTarget_HardwareAndSoftware);
+      } else {
+        const int stateIndex = builtInStateIndex(icon);
+        ESDDebug("Setting built-in icon: {} (state {})", icon, stateIndex);
+        mConnectionManager->SetState(stateIndex, context);
       }
       return;
     }
@@ -579,47 +570,6 @@ void AudioSwitcherStreamDeckPlugin::LoadCustomImages() {
     ESDDebug("Loaded {} custom images from disk", mCustomImages.size());
   } catch (const std::exception& e) {
     ESDDebug("Failed to load custom images: {}", e.what());
-  }
-}
-
-void AudioSwitcherStreamDeckPlugin::LoadBuiltInIcons() {
-  const std::vector<std::string> iconNames
-    = {"headphones", "speakers", "active", "inactive"};
-  const char* base64_chars
-    = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-  for (const auto& name : iconNames) {
-    // Prefer @2x version for high-res StreamDeck display
-    std::string filePath = mPluginDir + "\\" + name + "@2x.png";
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file.is_open()) {
-      filePath = mPluginDir + "\\" + name + ".png";
-      file.open(filePath, std::ios::binary);
-    }
-    if (!file.is_open()) {
-      ESDDebug("Failed to open built-in icon: {}", filePath);
-      continue;
-    }
-
-    std::vector<uint8_t> fileData(
-      (std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    file.close();
-
-    std::string base64Data;
-    for (size_t i = 0; i < fileData.size(); i += 3) {
-      uint32_t b1 = fileData[i];
-      uint32_t b2 = (i + 1 < fileData.size()) ? fileData[i + 1] : 0;
-      uint32_t b3 = (i + 2 < fileData.size()) ? fileData[i + 2] : 0;
-      uint32_t bits = (b1 << 16) | (b2 << 8) | b3;
-      base64Data += base64_chars[(bits >> 18) & 0x3F];
-      base64Data += base64_chars[(bits >> 12) & 0x3F];
-      base64Data
-        += (i + 1 < fileData.size()) ? base64_chars[(bits >> 6) & 0x3F] : '=';
-      base64Data += (i + 2 < fileData.size()) ? base64_chars[bits & 0x3F] : '=';
-    }
-
-    mBuiltInIcons[name] = "data:image/png;base64," + base64Data;
-    ESDDebug("Loaded built-in icon: {} ({} bytes)", name, base64Data.size());
   }
 }
 

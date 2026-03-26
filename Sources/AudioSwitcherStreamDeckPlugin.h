@@ -78,11 +78,8 @@ class AudioSwitcherStreamDeckPlugin : public ESDBasePlugin {
   // Global custom image store (shared across all buttons).
   // Keyed by short name (e.g. "img1") → base64 data URL.
   std::map<std::string, std::string> mCustomImages;
-  // Built-in icon images loaded from PNG files at startup.
-  // Keyed by icon name (e.g. "headphones") → base64 data URL.
-  std::map<std::string, std::string> mBuiltInIcons;
   std::string mCustomImagesPath;// path to the JSON file on disk
-  std::string mPluginDir;// directory containing the executable and icons
+  std::string mPluginDir;// directory containing the executable
 
   void OnDefaultDeviceChanged(
     AudioDeviceDirection direction,
@@ -93,5 +90,4 @@ class AudioSwitcherStreamDeckPlugin : public ESDBasePlugin {
 
   void LoadCustomImages();
   void SaveCustomImages();
-  void LoadBuiltInIcons();
 };

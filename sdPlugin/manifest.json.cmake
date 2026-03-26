@@ -2,7 +2,10 @@
   "Actions": [
     {
       "States": [
-        {"Image": "headphones"}
+        {"Image": "headphones"},
+        {"Image": "speakers"},
+        {"Image": "active"},
+        {"Image": "inactive"}
       ],
       "SupportedInMultiActions": true,
       "Icon": "headphones",
