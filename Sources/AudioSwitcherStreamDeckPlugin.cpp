@@ -156,30 +156,51 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
     currentDevice
       = GetDefaultAudioDeviceID(settings.direction, settings.secondaryRole);
   }
-  int nextIndex = 0;
 
+  // Find current device index
+  int currentIndex = 0;
   for (size_t i = 0; i < deviceList.size(); ++i) {
     if (deviceList[i].id == currentDevice) {
-      nextIndex = (i + 1) % deviceList.size();
+      currentIndex = i;
       break;
     }
   }
 
-  const auto& nextDevice = deviceList[nextIndex];
-  const auto deviceID = settings.GetVolatileDeviceID(nextIndex);
+  // Cycle through devices until we find one that's connected
+  int nextIndex = (currentIndex + 1) % deviceList.size();
+  int startIndex = nextIndex;
+  std::string deviceID;
+
+  while (true) {
+    deviceID = settings.GetVolatileDeviceID(nextIndex);
+
+    if (!deviceID.empty()) {
+      const auto deviceState = GetAudioDeviceState(deviceID);
+      if (deviceState == AudioDeviceState::CONNECTED) {
+        // Found a connected device
+        break;
+      }
+    }
+
+    // Move to next device and check if we've cycled through all
+    nextIndex = (nextIndex + 1) % deviceList.size();
+    if (nextIndex == startIndex) {
+      // We've cycled through all devices and none are connected
+      ESDDebug("No connected devices available");
+      mConnectionManager->ShowAlertForContext(inContext);
+      return;
+    }
+  }
 
   if (deviceID.empty()) {
     ESDDebug("Doing nothing, no device ID");
     return;
   }
 
-  const auto deviceState = GetAudioDeviceState(deviceID);
-  if (deviceState != AudioDeviceState::CONNECTED) {
-    mConnectionManager->ShowAlertForContext(inContext);
-    return;
-  }
-
-  ESDDebug("Setting device to {}", deviceID);
+  ESDDebug(
+    "Found next connected device at index {}. Setting device to {}",
+    nextIndex,
+    deviceID);
   SetDefaultAudioDeviceID(settings.direction, settings.role, deviceID);
   if (settings.setBothRoles) {
     SetDefaultAudioDeviceID(
@@ -359,11 +380,33 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
             // Update the deviceIcons map with the new icon
             settings.deviceIcons[device.id] = newIcon;
             ESDDebug(
-              "updateState: updated deviceIcons[{}] = {}", device.id, newIcon);
+              "updateState: mapped device.id='{}' to icon='{}'",
+              device.id,
+              newIcon);
+            ESDDebug(
+              "updateState: deviceIcons now has {} entries",
+              settings.deviceIcons.size());
+
+            // Verify the mapping exists
+            if (
+              settings.customImages.find(newIcon)
+              != settings.customImages.end()) {
+              ESDDebug(
+                "updateState: custom image '{}' is present in customImages",
+                newIcon);
+            } else {
+              ESDDebug(
+                "updateState: WARNING - custom image '{}' NOT FOUND in "
+                "customImages!",
+                newIcon);
+            }
           }
         }
       }
     }
+    // Persist the updated settings back to StreamDeck
+    const auto button = mButtons[inContext];
+    mConnectionManager->SetSettings(button.settings, inContext);
     // Call UpdateState without holding the lock (it will acquire its own)
     UpdateState(inContext);
     return;

@@ -340,11 +340,12 @@
             (d) => (typeof d == "object" ? d.id : d) === deviceId,
           );
 
-          // Skip devices that are already configured or not connected
+          // Only show connected or unplugged devices - exclude disabled/not present devices
           if (
             device.state !== "connected" &&
             device.state !== "device_present_no_connection"
           ) {
+            // Skip disabled and not present devices
             return;
           }
 

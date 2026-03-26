@@ -82,6 +82,15 @@ void from_json(const nlohmann::json& j, ButtonSettings& bs) {
     bs.matchStrategy = j.at("matchStrategy");
   }
 
+  if (j.contains("deviceIcons")) {
+    const auto& deviceIconsJson = j.at("deviceIcons");
+    if (deviceIconsJson.is_object()) {
+      for (auto& [deviceId, iconName] : deviceIconsJson.items()) {
+        bs.deviceIcons[deviceId] = iconName.get<std::string>();
+      }
+    }
+  }
+
   if (j.contains("customImages")) {
     const auto& customImagesJson = j.at("customImages");
     if (customImagesJson.is_object()) {
@@ -107,6 +116,8 @@ void to_json(nlohmann::json& j, const ButtonSettings& bs) {
     {"role", roleStr},
     {"devices", bs.devices},
     {"matchStrategy", bs.matchStrategy},
+    {"deviceIcons", bs.deviceIcons},
+    {"customImages", bs.customImages},
   };
 }
 
