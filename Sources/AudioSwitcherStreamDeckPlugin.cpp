@@ -169,7 +169,7 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
   // Find current device index
   int currentIndex = 0;
   for (size_t i = 0; i < deviceList.size(); ++i) {
-    if (deviceList[i].id == currentDevice) {
+    if (deviceList[i].info.id == currentDevice) {
       currentIndex = i;
       break;
     }
@@ -211,7 +211,7 @@ void AudioSwitcherStreamDeckPlugin::KeyUpForAction(
     nextIndex,
     deviceID);
 
-  UpdateState(inContext, deviceList[nextIndex].id);
+  UpdateState(inContext, deviceList[nextIndex].info.id);
 
   SetDefaultAudioDeviceID(settings.direction, settings.role, deviceID);
   if (settings.setBothRoles) {
@@ -244,7 +244,7 @@ void AudioSwitcherStreamDeckPlugin::FillButtonDeviceInfo(
 
   bool needsUpdate = false;
   for (auto& device : settings.devices) {
-    if (FillAudioDeviceInfo(device)) {
+    if (FillAudioDeviceInfo(device.info)) {
       needsUpdate = true;
     }
   }
@@ -291,8 +291,9 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
     if (mButtons.contains(inContext)) {
       auto& settings = mButtons[inContext].settings;
       if (inPayload.contains("device")) {
-        AudioDeviceInfo newDevice = inPayload.at("device");
-        FillAudioDeviceInfo(newDevice);
+        ConfiguredDevice newDevice;
+        newDevice.info = inPayload.at("device");
+        FillAudioDeviceInfo(newDevice.info);
         settings.devices.push_back(newDevice);
         mConnectionManager->SetSettings(settings, inContext);
       }
@@ -380,8 +381,7 @@ void AudioSwitcherStreamDeckPlugin::SendToPlugin(
 
           auto& settings = mButtons[inContext].settings;
           if (deviceIndex < settings.devices.size()) {
-            const auto& device = settings.devices[deviceIndex];
-            settings.deviceIcons[device.id] = newIcon;
+            settings.devices[deviceIndex].icon = newIcon;
           }
         }
       }
@@ -490,14 +490,17 @@ void AudioSwitcherStreamDeckPlugin::UpdateState(
   // Find which device is active and update its icon.
   // Match against both stored ID and volatile ID to handle fuzzy matching.
   for (size_t i = 0; i < deviceList.size(); ++i) {
-    const bool idMatch = (deviceList[i].id == activeDevice);
+    const bool idMatch = (deviceList[i].info.id == activeDevice);
     const bool volatileMatch
       = !idMatch && (settings.GetVolatileDeviceID(i) == activeDevice);
     if (idMatch || volatileMatch) {
-      const auto icon = settings.GetDeviceIcon(deviceList[i].id, i);
+      const char* const kDefaultIcons[]
+        = {"headphones", "speakers", "active", "inactive"};
+      const std::string icon = deviceList[i].icon.empty() ? kDefaultIcons[i % 4]
+                                                          : deviceList[i].icon;
       ESDDebug(
         "UpdateState: Device {} (index {}) icon: {} (volatile={})",
-        deviceList[i].id,
+        deviceList[i].info.id,
         i,
         icon,
         volatileMatch);

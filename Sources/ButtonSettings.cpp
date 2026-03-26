@@ -12,6 +12,8 @@
 
 #include "audio_json.h"
 
+using json = nlohmann::json;
+
 NLOHMANN_JSON_SERIALIZE_ENUM(
   DeviceMatchStrategy,
   {
@@ -40,18 +42,16 @@ void from_json(const nlohmann::json& j, ButtonSettings& bs) {
     const auto& devicesJson = j.at("devices");
     if (devicesJson.is_array()) {
       for (const auto& deviceJson : devicesJson) {
-        AudioDeviceInfo device;
+        ConfiguredDevice cd;
         if (deviceJson.is_string()) {
-          device.id = deviceJson;
+          cd.info.id = deviceJson;
         } else {
-          device = deviceJson.get<AudioDeviceInfo>();
-          // Extract icon preference if present
+          cd.info = deviceJson.get<AudioDeviceInfo>();
           if (deviceJson.contains("icon")) {
-            bs.deviceIcons[device.id]
-              = deviceJson.at("icon").get<std::string>();
+            cd.icon = deviceJson.at("icon").get<std::string>();
           }
         }
-        bs.devices.push_back(device);
+        bs.devices.push_back(cd);
       }
     }
   }
@@ -75,11 +75,10 @@ void to_json(nlohmann::json& j, const ButtonSettings& bs) {
   // survive round-trips through C++ SetSettings (AudioDeviceInfo::to_json
   // doesn't write icon, so we add it here).
   json devicesJson = json::array();
-  for (const auto& device : bs.devices) {
-    json deviceJson = device;// uses AudioDeviceInfo::to_json
-    const auto iconIt = bs.deviceIcons.find(device.id);
-    if (iconIt != bs.deviceIcons.end()) {
-      deviceJson["icon"] = iconIt->second;
+  for (const auto& cd : bs.devices) {
+    json deviceJson = cd.info;// uses AudioDeviceInfo::to_json
+    if (!cd.icon.empty()) {
+      deviceJson["icon"] = cd.icon;
     }
     devicesJson.push_back(deviceJson);
   }
@@ -151,20 +150,5 @@ std::string ButtonSettings::GetVolatileDeviceID(size_t index) const {
   if (index >= devices.size()) {
     return {};
   }
-  return GetVolatileID(devices[index], matchStrategy);
-}
-
-std::string ButtonSettings::GetDeviceIcon(
-  const std::string& deviceId,
-  size_t index) const {
-  // Check if there's a stored icon preference for this device
-  const auto it = deviceIcons.find(deviceId);
-  if (it != deviceIcons.end()) {
-    return it->second;
-  }
-
-  // Default: cycle through icons based on index
-  const std::vector<std::string> defaultIcons
-    = {"headphones", "speakers", "active", "inactive"};
-  return defaultIcons[index % defaultIcons.size()];
+  return GetVolatileID(devices[index].info, matchStrategy);
 }
